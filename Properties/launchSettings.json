@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "PocketDesk (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "PocketDesk (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
