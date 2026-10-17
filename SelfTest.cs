@@ -114,6 +114,14 @@ public static class SelfTest
             Check("自定义排序上移/下移生效",
                 moved && customAfter[0].Id == secondItem.Id && customAfter[1].Id == firstItem.Id);
 
+            var presetAppearance = BoxAppearance.FromSettings(AppSettingsService.Current);
+            presetAppearance.IconSize = 64;
+            AppearancePresetService.Save("自测预设", presetAppearance);
+            var savedPreset = AppearancePresetService.Load().FirstOrDefault(p => p.Name == "自测预设");
+            Check("外观预设保存/读取", savedPreset is not null && Math.Abs(savedPreset.Appearance.IconSize - 64) < 0.1);
+            AppearancePresetService.Delete("自测预设");
+            Check("外观预设删除", AppearancePresetService.Load().All(p => p.Name != "自测预设"));
+
             var recoverFrom = Path.Combine(source, "recover.txt");
             var recoverTo = Path.Combine(AppPaths.BoxStorage(box.Id), "recover.txt");
             File.WriteAllText(recoverFrom, "recover");

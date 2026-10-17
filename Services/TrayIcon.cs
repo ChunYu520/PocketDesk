@@ -141,6 +141,14 @@ public sealed class TrayIcon : IDisposable
 
     private IntPtr WindowProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
+        // 部分外壳（Win11 XAML 溢出面板）会直接把 WM_CONTEXTMENU 发给宿主窗口，
+        // 而不是通过回调消息转发。
+        if (msg == NativeMethods.WM_CONTEXTMENU)
+        {
+            ShowMenu();
+            return IntPtr.Zero;
+        }
+
         if (msg == CallbackMessage)
         {
             var notification = (int)(lParam.ToInt64() & 0xFFFF);

@@ -2,6 +2,7 @@ using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
@@ -36,6 +37,10 @@ public sealed partial class BoxWindow : Window
     private bool _dragMoved;
     private NativeMethods.POINT _dragStartCursor;
     private PointInt32 _dragStartPosition;
+
+    private bool _marqueeActive;
+    private bool _marqueeAdditive;
+    private Point _marqueeStart;
 
     private List<DeletedItemInfo> _lastDeleted = new();
 
@@ -78,6 +83,10 @@ public sealed partial class BoxWindow : Window
         _dropOverlayTimer.Tick += (_, _) => DropOverlay.Visibility = Visibility.Collapsed;
 
         ItemsView.ItemsSource = _items;
+        ItemsView.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnMarqueePointerPressed), true);
+        ItemsView.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(OnMarqueePointerMoved), true);
+        ItemsView.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnMarqueePointerReleased), true);
+        ItemsView.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(OnMarqueePointerReleased), true);
         ReloadItems();
 
         // 窗口显示后再应用位置：非激活显示（ShowAll / 启动恢复）不会触发 Activated。
@@ -156,6 +165,7 @@ public sealed partial class BoxWindow : Window
         if (args.WindowActivationState == WindowActivationState.Deactivated)
         {
             SetDropOverlay(false);
+            EndMarquee();
             // 失去焦点后回到桌面层，避免长期压在其他应用之上；
             // 点击收纳盒时会短暂正常浮起，便于使用菜单与对话框。
             SendToBack();
@@ -1238,6 +1248,7 @@ public sealed partial class BoxWindow : Window
             }
         });
         AddMenuItem(flyout, "外观…", "\uE771", OpenAppearanceAsync);
+        flyout.Items.Add(BuildPresetMenu());
         flyout.Items.Add(new MenuFlyoutSeparator());
         AddMenuItem(flyout, "新建同类收纳盒", "\uE710", () => WindowManager.OpenManager(_box.Type, createImmediately: true));
         AddMenuItem(flyout, "收纳盒管理器", "\uE8B7", () => WindowManager.OpenManager());
@@ -1302,6 +1313,83 @@ public sealed partial class BoxWindow : Window
         {
             LogService.Error("菜单动作失败", ex);
         }
+    }
+
+    private MenuFlyoutSubItem BuildPresetMenu()
+    {
+        var menu = new MenuFlyoutSubItem { Text = "外观预设" };
+        var presets = AppearancePresetService.Load();
+        foreach (var preset in presets)
+        {
+            var captured = preset;
+            var entry = new MenuFlyoutItem
+            {
+                Text = captured.Name,
+                Icon = new FontIcon { Glyph = "\uE790", FontSize = 14 },
+            };
+            entry.Click += (_, _) => ApplyPreset(captured);
+            menu.Items.Add(entry);
+        }
+
+        if (presets.Count == 0)
+        {
+            menu.Items.Add(new MenuFlyoutItem { Text = "暂无预设", IsEnabled = false });
+        }
+
+        menu.Items.Add(new MenuFlyoutSeparator());
+        var save = new MenuFlyoutItem { Text = "另存当前外观为预设…" };
+        save.Click += async (_, _) => await SavePresetAsync();
+        menu.Items.Add(save);
+
+        if (presets.Count > 0)
+        {
+            var delete = new MenuFlyoutSubItem { Text = "删除预设" };
+            foreach (var preset in presets)
+            {
+                var captured = preset;
+                var entry = new MenuFlyoutItem { Text = captured.Name };
+                entry.Click += (_, _) =>
+                {
+                    AppearancePresetService.Delete(captured.Name);
+                    ShowInfo("已删除外观预设", captured.Name, InfoBarSeverity.Informational, autoCloseMs: 2500);
+                };
+                delete.Items.Add(entry);
+            }
+
+            menu.Items.Add(delete);
+        }
+
+        return menu;
+    }
+
+    private void ApplyPreset(AppearancePreset preset)
+    {
+        _box.Appearance = preset.Appearance.Clone();
+        BoxService.SaveAppearance(_box, _box.Appearance);
+        ApplyTheme();
+        ApplyBackdrop();
+        ApplyAppearance();
+        ApplyPresenterState();
+        ReloadItems();
+        ShowInfo("已应用外观预设", preset.Name, InfoBarSeverity.Success, autoCloseMs: 2500);
+    }
+
+    private async Task SavePresetAsync()
+    {
+        var name = await Dialogs.PromptAsync(
+            Root,
+            "另存为外观预设",
+            "我的预设",
+            "预设名称",
+            "保存",
+            validate: text => text.Length > 40 ? "名称不能超过 40 个字符。" : null);
+        if (name is null)
+        {
+            return;
+        }
+
+        AppearancePresetService.Save(name, _box.Appearance);
+        ShowInfo("已保存外观预设", name, InfoBarSeverity.Success, autoCloseMs: 2500);
     }
 
     private void SetView(string view)
@@ -1690,6 +1778,131 @@ public sealed partial class BoxWindow : Window
     }
 
     // ---------------- 列表交互 ----------------
+
+    // ---------------- 框选 ----------------
+
+    private void OnMarqueePointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        var point = e.GetCurrentPoint(ItemsView);
+        if (!point.Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        var source = e.OriginalSource as DependencyObject;
+        if (FindItem(source) is not null ||
+            FindAncestor<ScrollBar>(source) is not null ||
+            FindAncestor<Button>(source) is not null)
+        {
+            return;
+        }
+
+        _marqueeActive = true;
+        _marqueeAdditive = e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Control);
+        _marqueeStart = point.Position;
+        if (!_marqueeAdditive)
+        {
+            ItemsView.SelectedItems.Clear();
+        }
+
+        SelectionRect.Visibility = Visibility.Visible;
+        Canvas.SetLeft(SelectionRect, _marqueeStart.X);
+        Canvas.SetTop(SelectionRect, _marqueeStart.Y);
+        SelectionRect.Width = 0;
+        SelectionRect.Height = 0;
+        ItemsView.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void OnMarqueePointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_marqueeActive)
+        {
+            return;
+        }
+
+        var current = e.GetCurrentPoint(ItemsView).Position;
+        var x = Math.Clamp(current.X, 0, Math.Max(1, ItemsView.ActualWidth));
+        var y = Math.Clamp(current.Y, 0, Math.Max(1, ItemsView.ActualHeight));
+        var left = Math.Min(_marqueeStart.X, x);
+        var top = Math.Min(_marqueeStart.Y, y);
+        var width = Math.Abs(x - _marqueeStart.X);
+        var height = Math.Abs(y - _marqueeStart.Y);
+
+        Canvas.SetLeft(SelectionRect, left);
+        Canvas.SetTop(SelectionRect, top);
+        SelectionRect.Width = width;
+        SelectionRect.Height = height;
+        SelectItemsIn(new Rect(left, top, width, height));
+        e.Handled = true;
+    }
+
+    private void OnMarqueePointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_marqueeActive)
+        {
+            return;
+        }
+
+        EndMarquee();
+        e.Handled = true;
+    }
+
+    private void EndMarquee()
+    {
+        if (!_marqueeActive)
+        {
+            return;
+        }
+
+        _marqueeActive = false;
+        SelectionRect.Visibility = Visibility.Collapsed;
+        try
+        {
+            ItemsView.ReleasePointerCaptures();
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    private void SelectItemsIn(Rect rect)
+    {
+        foreach (var item in _items)
+        {
+            if (ItemsView.ContainerFromItem(item) is not FrameworkElement container)
+            {
+                continue;
+            }
+
+            try
+            {
+                var transform = container.TransformToVisual(ItemsView);
+                var origin = transform.TransformPoint(new Point(0, 0));
+                var bounds = new Rect(origin.X, origin.Y, container.ActualWidth, container.ActualHeight);
+                var intersects = Intersects(bounds, rect);
+                if (intersects && !ItemsView.SelectedItems.Contains(item))
+                {
+                    ItemsView.SelectedItems.Add(item);
+                }
+                else if (!intersects && !_marqueeAdditive && ItemsView.SelectedItems.Contains(item))
+                {
+                    ItemsView.SelectedItems.Remove(item);
+                }
+            }
+            catch
+            {
+                // 容器正在虚拟化回收时忽略。
+            }
+        }
+    }
+
+    private static bool Intersects(Rect a, Rect b) =>
+        a.X < b.X + b.Width &&
+        a.X + a.Width > b.X &&
+        a.Y < b.Y + b.Height &&
+        a.Y + a.Height > b.Y;
 
     private void OnItemDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {

@@ -201,12 +201,21 @@
                 </ListView.ItemsPanel>
             </ListView>
 
+            <!-- 框选覆盖层 -->
+            <Canvas x:Name="SelectionCanvas" IsHitTestVisible="False">
+                <Border x:Name="SelectionRect"
+                        Visibility="Collapsed"
+                        Background="#332B88FF"
+                        BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="2" />
+            </Canvas>
+
             <StackPanel x:Name="EmptyState"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Spacing="10"
-                        IsHitTestVisible="False">
-                <FontIcon Glyph="&#xE7C3;" FontSize="34" Opacity="0.35" HorizontalAlignment="Center" />
+                        IsHitTestVisible="False">                <FontIcon Glyph="&#xE7C3;" FontSize="34" Opacity="0.35" HorizontalAlignment="Center" />
                 <TextBlock x:Name="EmptyTitle" Text="把文件拖到这里" FontSize="14" HorizontalAlignment="Center" />
                 <TextBlock Text="也可以右键新建文件夹或收纳文件"
                            FontSize="12"
