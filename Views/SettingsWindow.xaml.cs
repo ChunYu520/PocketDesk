@@ -20,15 +20,6 @@ public sealed partial class SettingsWindow : Window
         SetTitleBar(AppTitleBar);
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
 
-        if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
-        {
-            SystemBackdrop = new MicaBackdrop();
-        }
-        else if (Microsoft.UI.Composition.SystemBackdrops.DesktopAcrylicController.IsSupported())
-        {
-            SystemBackdrop = new DesktopAcrylicBackdrop();
-        }
-
         _saveTimer = DispatcherQueue.CreateTimer();
         _saveTimer.Interval = TimeSpan.FromMilliseconds(400);
         _saveTimer.IsRepeating = false;
@@ -71,13 +62,33 @@ public sealed partial class SettingsWindow : Window
 
     public void ApplyTheme()
     {
-        var theme = AppSettingsService.Current.ThemeKind;
-        RootGrid.RequestedTheme = theme switch
+        if (AccessibilityService.IsHighContrast)
         {
-            ThemeKind.Light => ElementTheme.Light,
-            ThemeKind.Dark => ElementTheme.Dark,
-            _ => ElementTheme.Default,
-        };
+            SystemBackdrop = null;
+            RootGrid.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
+        }
+        else
+        {
+            RootGrid.Background = null;
+            if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
+            {
+                SystemBackdrop = new MicaBackdrop();
+            }
+            else if (Microsoft.UI.Composition.SystemBackdrops.DesktopAcrylicController.IsSupported())
+            {
+                SystemBackdrop = new DesktopAcrylicBackdrop();
+            }
+        }
+
+        var theme = AppSettingsService.Current.ThemeKind;
+        RootGrid.RequestedTheme = AccessibilityService.IsHighContrast
+            ? ElementTheme.Default
+            : theme switch
+            {
+                ThemeKind.Light => ElementTheme.Light,
+                ThemeKind.Dark => ElementTheme.Dark,
+                _ => ElementTheme.Default,
+            };
     }
 
     private void LoadSettings()

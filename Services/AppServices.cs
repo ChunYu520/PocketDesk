@@ -42,6 +42,7 @@ public static class AppServices
         }
 
         AutostartService.Apply(AppSettingsService.Current.LaunchAtStartup);
+        AccessibilityService.Initialize();
 
         try
         {

@@ -17,6 +17,7 @@ public static class WindowManager
 
         _initialized = true;
         AppSettingsService.Changed += ApplySettingsToWindows;
+        AccessibilityService.Changed += ApplySettingsToWindows;
         BoxService.BoxesChanged += OnBoxesChanged;
         ImportService.BoxChanged += OnBoxContentChanged;
     }

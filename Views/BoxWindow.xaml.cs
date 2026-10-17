@@ -254,12 +254,14 @@ public sealed partial class BoxWindow : Window
 
     private void ApplyTheme()
     {
-        RootGrid.RequestedTheme = ResolveTheme() switch
-        {
-            ThemeKind.Light => ElementTheme.Light,
-            ThemeKind.Dark => ElementTheme.Dark,
-            _ => ElementTheme.Default,
-        };
+        RootGrid.RequestedTheme = AccessibilityService.IsHighContrast
+            ? ElementTheme.Default
+            : ResolveTheme() switch
+            {
+                ThemeKind.Light => ElementTheme.Light,
+                ThemeKind.Dark => ElementTheme.Dark,
+                _ => ElementTheme.Default,
+            };
     }
 
     private ThemeKind ResolveTheme()
@@ -273,7 +275,12 @@ public sealed partial class BoxWindow : Window
         var material = ResolveMaterial();
         try
         {
-            if (material == MaterialKind.Mica && MicaController.IsSupported())
+            if (AccessibilityService.IsHighContrast)
+            {
+                // 高对比度下必须保证可读性：禁用 Mica/Acrylic。
+                SystemBackdrop = null;
+            }
+            else if (material == MaterialKind.Mica && MicaController.IsSupported())
             {
                 SystemBackdrop = new MicaBackdrop();
             }
@@ -1967,6 +1974,10 @@ public sealed partial class BoxWindow : Window
     {
         switch (e.Key)
         {
+            case Windows.System.VirtualKey.Tab:
+                MoveSelectionByTab((NativeMethods.GetKeyState(NativeMethods.VK_SHIFT) & 0x8000) != 0);
+                e.Handled = true;
+                break;
             case Windows.System.VirtualKey.Delete:
                 DeleteSelectedAsync();
                 e.Handled = true;
@@ -1993,6 +2004,34 @@ public sealed partial class BoxWindow : Window
                 ItemsView.SelectedItems.Clear();
                 e.Handled = true;
                 break;
+        }
+    }
+
+    private void MoveSelectionByTab(bool backwards)
+    {
+        if (_items.Count == 0)
+        {
+            return;
+        }
+
+        var index = ItemsView.SelectedIndex;
+        if (index < 0)
+        {
+            index = backwards ? 0 : -1;
+        }
+
+        var next = index + (backwards ? -1 : 1);
+        if (next < 0 || next >= _items.Count)
+        {
+            return;
+        }
+
+        ItemsView.SelectedIndex = next;
+        var item = _items[next];
+        ItemsView.ScrollIntoView(item);
+        if (ItemsView.ContainerFromItem(item) is Control container)
+        {
+            container.Focus(FocusState.Keyboard);
         }
     }
 
