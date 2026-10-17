@@ -349,6 +349,29 @@ public static class ItemRepository
         return Convert.ToDouble(command.ExecuteScalar(), CultureInfo.InvariantCulture);
     }
 
+    /// <summary>批量写入自定义排序下标（单事务）。</summary>
+    public static void UpdateSortIndices(IReadOnlyList<BoxItem> orderedItems)
+    {
+        if (orderedItems.Count == 0)
+        {
+            return;
+        }
+
+        using var connection = Database.Open();
+        using var transaction = connection.BeginTransaction();
+        for (var i = 0; i < orderedItems.Count; i++)
+        {
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "UPDATE items SET sort_index = $sort WHERE id = $id;";
+            command.Parameters.AddWithValue("$sort", i);
+            command.Parameters.AddWithValue("$id", orderedItems[i].Id);
+            command.ExecuteNonQuery();
+        }
+
+        transaction.Commit();
+    }
+
     private static void AddParameters(SqliteCommand command, BoxItem item)
     {
         command.Parameters.AddWithValue("$id", item.Id);

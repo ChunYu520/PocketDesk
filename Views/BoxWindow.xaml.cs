@@ -114,6 +114,9 @@ public sealed partial class BoxWindow : Window
                 hwnd,
                 NativeMethods.GWL_EXSTYLE,
                 (IntPtr)(exStyle | NativeMethods.WS_EX_TOOLWINDOW));
+            LogService.Info(
+                $"收纳盒窗口初始化：{AppWindow.Size.Width}x{AppWindow.Size.Height}px，" +
+                $"DPI {DpiUtil.WindowDpi(hwnd)}，shownInSwitchers={AppWindow.IsShownInSwitchers}");
 
             var corner = NativeMethods.DWMWCP_ROUND;
             NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_WINDOW_CORNER_PREFERENCE, ref corner, sizeof(int));
@@ -1091,6 +1094,28 @@ public sealed partial class BoxWindow : Window
         AddMenuItem(flyout, "打开所在位置", "\uE8B7", () => BoxService.RevealItem(_box, selected[0]), selected.Count == 1);
         flyout.Items.Add(new MenuFlyoutSeparator());
         AddMenuItem(flyout, "重命名", "\uE8AC", RenameSelectedAsync, selected.Count == 1, "F2");
+        if (selected.Count > 1)
+        {
+            AddMenuItem(flyout, $"批量重命名 {selected.Count} 项…", "\uE8AC", BatchRenameSelectedAsync);
+        }
+        if (string.Equals(_box.SortField, "custom", StringComparison.OrdinalIgnoreCase) && selected.Count == 1)
+        {
+            AddMenuItem(flyout, "在自定义顺序中上移", "\uE74A", () =>
+            {
+                if (BoxService.MoveItemOrder(_box, selected[0], -1))
+                {
+                    ReloadItems();
+                }
+            });
+            AddMenuItem(flyout, "在自定义顺序中下移", "\uE74B", () =>
+            {
+                if (BoxService.MoveItemOrder(_box, selected[0], 1))
+                {
+                    ReloadItems();
+                }
+            });
+        }
+
         AddMenuItem(flyout, selected.Count > 1 ? $"删除 {selected.Count} 项" : "删除", "\uE74D", DeleteSelectedAsync, true, "Del");
         flyout.Items.Add(new MenuFlyoutSeparator());
         AddMenuItem(flyout, "复制路径", "\uE8C8", CopyPathsAsync);
@@ -1339,6 +1364,57 @@ public sealed partial class BoxWindow : Window
         catch (Exception ex)
         {
             ShowInfo("重命名失败", ex.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    private async void BatchRenameSelectedAsync()
+    {
+        var selected = GetSelectedItems();
+        if (selected.Count < 2)
+        {
+            return;
+        }
+
+        var ordered = _items.Where(i => selected.Contains(i)).ToList();
+        var options = await Dialogs.BatchRenameAsync(Root, ordered.Select(i => i.DisplayName).ToList());
+        if (options is null)
+        {
+            return;
+        }
+
+        var failures = new List<string>();
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var item = ordered[i];
+            var numbered = options.Prefix + (options.StartNumber + i).ToString("D" + options.Digits);
+            var extension = item.Kind is ItemKind.Folder || (item.Kind == ItemKind.Url && item.IsReference)
+                ? string.Empty
+                : Path.GetExtension(item.RealPath);
+            var newName = options.KeepExtension ? numbered + extension : numbered;
+            try
+            {
+                BoxService.RenameItem(_box, item, newName);
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"“{item.DisplayName}”：{ex.Message}");
+            }
+        }
+
+        ReloadItems();
+        if (failures.Count > 0)
+        {
+            var detail = string.Join("；", failures.Take(3));
+            if (failures.Count > 3)
+            {
+                detail += $"；另有 {failures.Count - 3} 项失败";
+            }
+
+            ShowInfo("部分重命名失败", detail, InfoBarSeverity.Warning, autoCloseMs: 9000);
+        }
+        else
+        {
+            ShowInfo("已重命名", $"已批量重命名 {ordered.Count} 项。", InfoBarSeverity.Success, autoCloseMs: 3000);
         }
     }
 

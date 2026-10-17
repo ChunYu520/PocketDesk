@@ -87,6 +87,33 @@ public static class SelfTest
             var webItems = BoxService.GetItems(box).Where(i => i.DisplayName.StartsWith("web", StringComparison.OrdinalIgnoreCase)).ToList();
             Check("同名冲突保留两者", webItems.Count == 2, $"实际 {webItems.Count}");
 
+            var batch1 = Path.Combine(source, "batch1.txt");
+            var batch2 = Path.Combine(source, "batch2.txt");
+            File.WriteAllText(batch1, "batch1");
+            File.WriteAllText(batch2, "batch2");
+            await ImportService.ImportPathsAsync(box, new[] { batch1, batch2 }, SilentImportInteraction.Instance);
+            var batchItems = BoxService.GetItems(box)
+                .Where(i => i.DisplayName.StartsWith("batch", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            for (var i = 0; i < batchItems.Count; i++)
+            {
+                BoxService.RenameItem(box, batchItems[i], $"批次_{i + 1:D2}.txt");
+            }
+
+            var batchNames = ItemRepository.GetByBox(box.Id).Select(i => i.DisplayName).ToList();
+            Check("批量重命名生成序号名称",
+                batchNames.Contains("批次_01.txt") && batchNames.Contains("批次_02.txt"),
+                string.Join(",", batchNames));
+
+            BoxService.SetSort(box, "custom", false);
+            var customBefore = BoxService.GetItems(box);
+            var firstItem = customBefore[0];
+            var secondItem = customBefore[1];
+            var moved = BoxService.MoveItemOrder(box, firstItem, 1);
+            var customAfter = BoxService.GetItems(box);
+            Check("自定义排序上移/下移生效",
+                moved && customAfter[0].Id == secondItem.Id && customAfter[1].Id == firstItem.Id);
+
             var recoverFrom = Path.Combine(source, "recover.txt");
             var recoverTo = Path.Combine(AppPaths.BoxStorage(box.Id), "recover.txt");
             File.WriteAllText(recoverFrom, "recover");

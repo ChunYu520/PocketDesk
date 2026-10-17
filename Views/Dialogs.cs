@@ -111,8 +111,7 @@ public static class Dialogs
         XamlRoot root,
         string fileName,
         string destinationPath)
-    {
-        var choice = ConflictChoice.Skip;
+    {        var choice = ConflictChoice.Skip;
         var applyAll = new CheckBox
         {
             Content = "对后续同名项使用相同选择",
@@ -309,6 +308,111 @@ public static class Dialogs
         return result;
     }
 
+    /// <summary>批量重命名：前缀 + 递增序号，可选保留扩展名。</summary>
+    public static async Task<BatchRenameOptions?> BatchRenameAsync(XamlRoot root, IReadOnlyList<string> sampleNames)
+    {
+        var prefixBox = new TextBox { Text = "文件_", PlaceholderText = "名称前缀" };
+        var startBox = new NumberBox
+        {
+            Value = 1,
+            Minimum = 1,
+            Maximum = 9999,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+        };
+        var digitsBox = new ComboBox
+        {
+            ItemsSource = new[] { "1 位", "2 位", "3 位", "4 位" },
+            SelectedIndex = 1,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        var keepExtension = new CheckBox { Content = "保留原扩展名", IsChecked = true };
+        var preview = new TextBlock { FontSize = 12, Opacity = 0.7, TextWrapping = TextWrapping.Wrap };
+        var error = new TextBlock
+        {
+            Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
+            FontSize = 12,
+            Visibility = Visibility.Collapsed,
+        };
+
+        var panel = new StackPanel { Spacing = 10, Width = 420 };
+        panel.Children.Add(new TextBlock { Text = "名称前缀", FontSize = 12, Opacity = 0.75 });
+        panel.Children.Add(prefixBox);
+        panel.Children.Add(new TextBlock { Text = "起始序号", FontSize = 12, Opacity = 0.75 });
+        panel.Children.Add(startBox);
+        panel.Children.Add(new TextBlock { Text = "序号位数", FontSize = 12, Opacity = 0.75 });
+        panel.Children.Add(digitsBox);
+        panel.Children.Add(keepExtension);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "按当前显示顺序重命名。普通盒会改动存储文件，映射盒会同步重命名源文件。",
+            FontSize = 11,
+            Opacity = 0.6,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(preview);
+        panel.Children.Add(error);
+
+        void UpdatePreview()
+        {
+            var prefix = prefixBox.Text ?? string.Empty;
+            var start = (int)Math.Max(1, startBox.Value);
+            var digits = digitsBox.SelectedIndex + 1;
+            var keep = keepExtension.IsChecked == true;
+            var examples = new List<string>();
+            for (var i = 0; i < Math.Min(3, sampleNames.Count); i++)
+            {
+                var source = sampleNames[i];
+                var ext = keep ? Path.GetExtension(source) : string.Empty;
+                examples.Add($"{prefix}{(start + i).ToString("D" + digits)}{ext}");
+            }
+
+            preview.Text = examples.Count == 0
+                ? string.Empty
+                : $"预览：{string.Join("、", examples)}{(sampleNames.Count > 3 ? " …" : string.Empty)}";
+        }
+
+        prefixBox.TextChanged += (_, _) => UpdatePreview();
+        startBox.ValueChanged += (_, _) => UpdatePreview();
+        digitsBox.SelectionChanged += (_, _) => UpdatePreview();
+        keepExtension.Checked += (_, _) => UpdatePreview();
+        keepExtension.Unchecked += (_, _) => UpdatePreview();
+        UpdatePreview();
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = root,
+            Title = $"批量重命名（{sampleNames.Count} 项）",
+            Content = panel,
+            PrimaryButtonText = "重命名",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+
+        BatchRenameOptions? result = null;
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            var prefix = prefixBox.Text ?? string.Empty;
+            if (prefix.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            {
+                args.Cancel = true;
+                error.Text = "前缀包含不允许的字符。";
+                error.Visibility = Visibility.Visible;
+                return;
+            }
+
+            result = new BatchRenameOptions
+            {
+                Prefix = prefix,
+                StartNumber = (int)Math.Max(1, startBox.Value),
+                Digits = Math.Clamp(digitsBox.SelectedIndex + 1, 1, 4),
+                KeepExtension = keepExtension.IsChecked == true,
+            };
+        };
+
+        await dialog.ShowAsync();
+        return result;
+    }
+
     private static StackPanel Labeled(string label, UIElement control)
     {
         var panel = new StackPanel { Spacing = 4 };
@@ -316,4 +420,13 @@ public static class Dialogs
         panel.Children.Add(control);
         return panel;
     }
+}
+
+/// <summary>批量重命名选项。</summary>
+public sealed class BatchRenameOptions
+{
+    public string Prefix { get; init; } = string.Empty;
+    public int StartNumber { get; init; } = 1;
+    public int Digits { get; init; } = 1;
+    public bool KeepExtension { get; init; } = true;
 }

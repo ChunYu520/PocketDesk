@@ -341,7 +341,7 @@ public static class BoxService
         var fileName = isDirectory || requestedHasExtension ? trimmed : trimmed + extension;
         if (string.Equals(fileName, Path.GetFileName(currentPath), StringComparison.Ordinal))
         {
-            item.DisplayName = Path.GetFileNameWithoutExtension(fileName);
+            item.DisplayName = PathUtil.GetDisplayName(fileName);
             ItemRepository.Update(item);
             NotifyBoxContentChanged(box.Id);
             return;
@@ -370,7 +370,7 @@ public static class BoxService
             item.SourcePath = destination;
         }
 
-        item.DisplayName = Path.GetFileNameWithoutExtension(destination);
+        item.DisplayName = PathUtil.GetDisplayName(destination);
         if (item.Kind == ItemKind.Shortcut)
         {
             var shortcut = ShortcutService.Resolve(destination);
@@ -440,6 +440,31 @@ public static class BoxService
         }
 
         return (moved, moved == 0 ? "没有收纳项被移动。" : null);
+    }
+
+    /// <summary>自定义排序：把某一项上移/下移一格。</summary>
+    public static bool MoveItemOrder(Box box, BoxItem item, int delta)
+    {
+        var ordered = ItemRepository.GetByBox(box.Id)
+            .OrderBy(i => i.SortIndex)
+            .ThenBy(i => i.AddedAt)
+            .ToList();
+        var index = ordered.FindIndex(i => i.Id == item.Id);
+        var target = index + delta;
+        if (index < 0 || target < 0 || target >= ordered.Count || delta == 0)
+        {
+            return false;
+        }
+
+        (ordered[index], ordered[target]) = (ordered[target], ordered[index]);
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            ordered[i].SortIndex = i;
+        }
+
+        ItemRepository.UpdateSortIndices(ordered);
+        NotifyBoxContentChanged(box.Id);
+        return true;
     }
 
     public static void RefreshState(BoxItem item)
