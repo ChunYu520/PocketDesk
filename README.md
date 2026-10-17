@@ -1,0 +1,129 @@
+# PocketDesk
+
+桌面上的原生收纳层，而不是另一个文件管理器。基于 **WinUI 3 + Windows App SDK + .NET 10 + SQLite** 实现。
+
+![普通收纳盒](docs/box-normal.png)
+
+## 当前状态
+
+已实现 PRD V1.1 的 **MVP（P0）主体**，并在 Windows 11 x64（200% DPI）上完成手工与自动化验证：
+
+- 普通 / 映射 / 目标三种收纳盒（目标盒为 P1 基础能力）
+- 拖入、拖出、跨盒拖放、粘贴、粘贴路径收纳
+- 同名冲突（保留两者 / 替换 / 跳过 / 取消批量）、大文件确认
+- 普通盒真实移动 + journal 崩溃恢复 + 原位还原（失败回退桌面并加 `restored`）
+- 映射盒只存引用，重命名会同步源文件（AC-02）
+- 无边框 / Mica / 亚克力 / 纯色，跟随明暗主题与系统强调色
+- 桌面层行为：**不占任务栏、不进 Alt+Tab、失焦后沉到最底层**；只有显式“始终置顶”才浮起
+- 卷起、位置/尺寸记忆、多显示器校验、逐盒外观（圆角/透明度/图标大小/列数/文件名行数/网格或列表）
+- 多选、右键菜单、排序（名称自然排序/类型/修改时间/添加时间/自定义）、键盘（Enter/F2/Delete/Ctrl+A/F5）
+- 系统图标提取（`IShellItemImageFactory`，异步 + 内存缓存）
+- 托盘菜单、开机自启、单实例、关闭到托盘、撤销删除（Toast/InfoBar）
+- 收纳盒管理器、统一设置（常规/外观/行为/存储/关于）、诊断日志导出
+- SQLite schema 版本 + 迁移前自动备份（保留 3 份）
+
+尚未实现（详见“已知限制”）：磁力访问窗、快速面板、导入导出/全量备份、首次启动向导、中英文资源化、Native AOT、安装包。
+
+![收纳盒管理器](docs/manager.png)
+![设置](docs/settings.png)
+
+## 构建与运行
+
+要求：Windows 10 1809+、.NET 10 SDK。
+
+```powershell
+cd PocketDesk
+dotnet build -p:Platform=x64
+.\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\PocketDesk.exe
+```
+
+- 项目已启用 **Windows App SDK 自包含**（`WindowsAppSDKSelfContained=true`），无需预装 Windows App Runtime。
+- Debug 为框架依赖（需要 .NET 10 桌面运行时）；Release 会同时自包含 .NET 运行时：
+  ```powershell
+  dotnet publish -c Release -p:Platform=x64
+  # 输出：bin\Release\net10.0-windows10.0.26100.0\win-x64\publish
+  ```
+- 当前采用未打包（`WindowsPackageType=None`）交付，数据写入真实的 `%LOCALAPPDATA%\PocketDesk`，不受 MSIX 文件系统虚拟化影响。后续如需 MSIX，建议单独建立打包工程。
+
+## 首次使用
+
+启动后打开 **收纳盒管理器** → “新建收纳盒”：
+
+| 类型 | 行为 |
+|---|---|
+| 普通收纳盒 | 文件真实移入 `%LOCALAPPDATA%\PocketDesk\Storage\<盒ID>`；删除项目/收纳盒时自动还原到原位置 |
+| 映射收纳盒 | 只保存绝对路径，绝不移动、复制或修改源文件 |
+| 目标收纳盒 | 绑定一个现有文件夹，内容双向显示（基础同步） |
+
+把文件从资源管理器/桌面拖进盒子即可；右键空白处可排序、切换视图、新建文件夹、粘贴路径。右键标题栏或底部“…”可以打开外观、置顶、卷起等。
+
+> 收纳盒默认位于桌面层：不占任务栏、不进 Alt+Tab。点击时短暂浮起以便操作，失去焦点后自动沉底。需要常驻最前时在菜单中勾选“始终置顶”。
+
+## 数据与文件安全
+
+```
+%LOCALAPPDATA%\PocketDesk\
+├─ pocketdesk.db          SQLite（WAL）
+├─ Storage\<盒ID>\        普通盒实际文件
+├─ backup\                迁移前数据库备份（最近 3 份）
+├─ Logs\                  运行日志（导出时脱敏）
+└─ Export\                诊断日志 zip
+```
+
+- 所有真实移动先写 `journal`（PENDING），移动完成后标记 DONE；启动时自动收敛半移动并清理 `*.pocketdesk.tmp`。
+- 普通盒删除 = 还原到 `sourcePath`；原目录不存在或同名时回退桌面并加 ` (restored)`。
+- 映射盒的所有文件操作都直接作用于源文件（重命名）或不改动源文件（删除引用）。
+- 普通盒拒绝：UNC 网络路径、OneDrive 云占位文件、回收站路径、超过 259 字符的路径。
+- 符号链接/目录联接只保存引用，不跟随、不复制。
+- 不收集文件内容或路径；诊断日志导出时会把用户目录替换为占位符。
+
+## 开发验证
+
+无界面自测（19 项断言，覆盖导入、原位还原、撤销、重命名、映射盒、同名冲突、journal 恢复、删除收纳盒）：
+
+```powershell
+$testRoot = "$PWD\.selftest"
+$env:POCKETDESK_HOME = $testRoot
+.\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\PocketDesk.exe --selftest
+Get-Content "$testRoot\selftest-report.txt"
+```
+
+`POCKETDESK_HOME` 可把数据根目录指向任意隔离位置（测试/便携模式）。`--demo` 会创建两个演示收纳盒，便于截图与手工验收。
+
+## 架构
+
+```
+Models.cs                 领域模型（Box / BoxItem / Journal / Settings / Appearance）
+Data/
+  Database.cs             SQLite 初始化、schema 版本、迁移备份
+  Repositories.cs         Box / Item / Journal / Settings 仓储
+Services/
+  FileSystemService.cs    journal 移动、跨卷先复制校验后删除、原位还原、启动恢复
+  ImportService.cs        收纳规则、冲突/云文件/UNC/链接/大文件策略
+  BoxService.cs           收纳盒与收纳项 CRUD、排序、删除/撤销、目标盒同步
+  IconService.cs          Shell 图标提取 + SoftwareBitmap + 缓存
+  TrayIcon.cs             Shell_NotifyIcon 托盘与原生菜单
+  SingleInstanceService.cs Mutex + 命名管道（show/manager/settings/hide/exit）
+  WindowManager.cs        窗口生命周期、贴边排列、退出清理
+Views/
+  BoxWindow.xaml          无边框收纳盒（拖拽、多选、右键、卷起、桌面层）
+  BoxManagerWindow.xaml   收纳盒管理器
+  SettingsWindow.xaml     NavigationView 设置
+  Dialogs.cs              ContentDialog（冲突/重命名/外观/确认）
+```
+
+## 已知限制 / 后续
+
+- **磁力访问窗、快速面板**未实现（PRD 已列为 P1）。
+- **导入/导出/完整备份**未实现（P1）；目前仅有诊断日志导出。
+- **Native AOT** 未启用：WinUI 3 的 COM/WinRT 与 `System.Text.Json` 反射需改造为源生成器，并需逐库验证裁剪；当前 Release 为自包含、不裁剪。
+- **安装包**未做（MSIX / Inno Setup），当前直接运行发布目录。
+- 目标盒同步为单向补充（外部新增会显示，外部删除不会自动移除记录），完整双向同步待完善。
+- 多选批量重命名、框选、自定义排序拖拽调整、外观预设、开机自启的 UI 端到端验证仍待补。
+- 界面文案暂为内联中文，`.resw` 资源化与英文版待补。
+- 提权进程拖入（UIPI）尚未做 Toast 提示；已提供“粘贴路径收纳”兜底。
+- 空闲内存尚未达到 PRD 的 ≤80 MB 目标（Release 实测约 150–170 MB）：WinUI 3 基线加自包含运行时占用较高，后续需通过 AOT/裁剪、图标缓存上限与窗口按需创建来优化。
+
+## 第三方组件
+
+Windows App SDK（MIT）、.NET（MIT）、SQLite / SQLitePCLRaw（Public Domain / Apache-2.0）、Microsoft.Data.Sqlite（MIT）。

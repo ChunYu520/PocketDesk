@@ -11,7 +11,14 @@
     <PublishProfile Condition="Exists('Properties\PublishProfiles\win-$(Platform).pubxml')">win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
-    <EnableMsixTooling>true</EnableMsixTooling>
+    <EnableMsixTooling>false</EnableMsixTooling>
+    <!--
+      MVP 采用「未打包 + Windows App SDK 自包含」交付：不依赖用户预装 Windows App Runtime，
+      也不受 MSIX 文件系统虚拟化影响，普通收纳盒的文件位置始终是真实的 %LOCALAPPDATA%\PocketDesk。
+      后续如需 MSIX，可单独建立打包工程，而不是切换本项目类型。
+    -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -38,7 +45,7 @@
     package has not yet been restored.
   -->
   <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
-    <ProjectCapability Include="Msix"/>
+    <ProjectCapability Include="Msix" />
   </ItemGroup>
 
   <!--
@@ -50,9 +57,9 @@
     <PropertyGroup> above to opt out.
   -->
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="*" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="*" />
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="*" />
   </ItemGroup>
 
   <!--
@@ -68,7 +75,9 @@
   <PropertyGroup>
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
-    <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
-    <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
+    <!-- WinUI 3 的裁剪/AOT 需要逐库验证，当前 Release 先关闭裁剪，避免误裁反射与 WinRT 元数据。 -->
+    <PublishTrimmed>False</PublishTrimmed>
+    <!-- Release 同时自包含 .NET 运行时，便于在未安装 .NET 的机器上直接运行。 -->
+    <SelfContained Condition="'$(Configuration)' != 'Debug'">true</SelfContained>
   </PropertyGroup>
 </Project>

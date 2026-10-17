@@ -1,45 +1,70 @@
-﻿using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
-using Microsoft.UI.Xaml.Shapes;
-using Windows.ApplicationModel;
-using Windows.ApplicationModel.Activation;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
+using Microsoft.UI.Dispatching;
 
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
+namespace PocketDesk;
 
-namespace PocketDesk
+/// <summary>应用入口：单实例、服务初始化、布局恢复。</summary>
+public partial class App : Application
 {
-    /// <summary>
-    /// Provides application-specific behavior to supplement the default Application class.
-    /// </summary>
-    public partial class App : Application
+    public App()
     {
-        private Window? _window;
-
-        /// <summary>
-        /// Initializes the singleton application object.  This is the first line of authored code
-        /// executed, and as such is the logical equivalent of main() or WinMain().
-        /// </summary>
-        public App()
+        InitializeComponent();
+        UnhandledException += (_, e) =>
         {
-            InitializeComponent();
+            LogService.Error("未处理异常", e.Exception);
+        };
+    }
+
+    protected override async void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
+    {
+        if (Environment.GetCommandLineArgs().Any(a => string.Equals(a, "--selftest", StringComparison.OrdinalIgnoreCase)))
+        {
+            var exitCode = await SelfTest.RunAsync();
+            Environment.Exit(exitCode);
+            return;
         }
 
-        /// <summary>
-        /// Invoked when the application is launched.
-        /// </summary>
-        /// <param name="args">Details about the launch request and process.</param>
-        protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
+        var dispatcher = DispatcherQueue.GetForCurrentThread();
+
+        // 二次启动：把意图交给已有实例后立即退出，避免重复窗口。
+        if (!SingleInstanceService.TryAcquire(dispatcher))
         {
-            _window = new MainWindow();
-            _window.Activate();
+            SingleInstanceService.NotifyExistingInstance("show");
+            Exit();
+            return;
+        }
+
+        if (!AppServices.Initialize())
+        {
+            Exit();
+            return;
+        }
+
+        WindowManager.Initialize();
+
+        if (Environment.GetCommandLineArgs().Any(a => string.Equals(a, "--demo", StringComparison.OrdinalIgnoreCase)))
+        {
+            await DemoMode.ShowAsync();
+            return;
+        }
+
+        if (AppSettingsService.Current.RestoreLayoutOnStartup)
+        {
+            WindowManager.RestoreLayout();
+        }
+        else
+        {
+            WindowManager.ShowAll();
+        }
+
+        var recovery = AppServices.Recovery;
+        if (recovery.Failed > 0)
+        {
+            NativeMethods.MessageBox(
+                IntPtr.Zero,
+                "启动时发现未完成的文件移动，其中有 " + recovery.Failed + " 项无法自动恢复。\n\n" +
+                "请检查收纳盒中的文件，或在设置中导出诊断日志后反馈。",
+                "PocketDesk",
+                NativeMethods.MB_OK | NativeMethods.MB_ICONINFORMATION);
         }
     }
 }
