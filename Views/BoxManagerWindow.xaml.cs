@@ -11,6 +11,8 @@ public sealed partial class BoxManagerWindow : Window
 {
     private readonly ObservableCollection<BoxRow> _rows = new();
     private bool _creating;
+    private bool _updatingFilter;
+    private string? _groupFilter;
 
     public BoxManagerWindow()
     {
@@ -32,6 +34,7 @@ public sealed partial class BoxManagerWindow : Window
         ApplyTheme();
         BoxesList.ItemsSource = _rows;
         BoxesList.SelectionChanged += (_, _) => UpdateButtons();
+        RefreshGroupFilter();
         RefreshBoxes();
         Activated += OnFirstActivated;
     }
@@ -74,18 +77,19 @@ public sealed partial class BoxManagerWindow : Window
         var selectedId = SelectedRow?.Id;
         var boxes = BoxRepository.GetAll();
         var counts = ItemRepository.CountAll();
+        var groups = BoxGroupService.Load();
 
         _rows.Clear();
-        foreach (var box in boxes)
+        foreach (var box in boxes.Where(b => MatchesGroupFilter(groups.GetValueOrDefault(b.Id))))
         {
-            _rows.Add(new BoxRow(box, counts.GetValueOrDefault(box.Id)));
+            _rows.Add(new BoxRow(box, counts.GetValueOrDefault(box.Id), groups.GetValueOrDefault(box.Id)));
         }
 
         EmptyHint.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         BoxesList.Visibility = _rows.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-        SummaryText.Text = _rows.Count == 0
+        SummaryText.Text = boxes.Count == 0
             ? string.Empty
-            : $"{_rows.Count} 个收纳盒 · {boxes.Count(b => b.IsVisible)} 个显示中";
+            : $"{_rows.Count}/{boxes.Count} 个收纳盒 · {boxes.Count(b => b.IsVisible)} 个显示中";
 
         if (selectedId is not null)
         {
@@ -95,6 +99,64 @@ public sealed partial class BoxManagerWindow : Window
         UpdateButtons();
     }
 
+    private bool MatchesGroupFilter(string? group)
+    {
+        if (_groupFilter is null)
+        {
+            return true;
+        }
+
+        if (_groupFilter.Length == 0)
+        {
+            return string.IsNullOrEmpty(group);
+        }
+
+        return string.Equals(group, _groupFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void RefreshGroupFilter()
+    {
+        _updatingFilter = true;
+        try
+        {
+            var previous = GroupFilter.SelectedIndex > 0 ? GroupFilter.SelectedItem as string : null;
+            GroupFilter.Items.Clear();
+            GroupFilter.Items.Add("全部分组");
+            GroupFilter.Items.Add("未分组");
+            foreach (var group in BoxGroupService.DistinctGroups())
+            {
+                GroupFilter.Items.Add(group);
+            }
+
+            var index = previous is null ? 0 : GroupFilter.Items.IndexOf(previous);
+            GroupFilter.SelectedIndex = index >= 0 ? index : 0;
+            _groupFilter = GroupFilter.SelectedIndex <= 0
+                ? null
+                : GroupFilter.SelectedIndex == 1
+                    ? string.Empty
+                    : GroupFilter.SelectedItem as string;
+        }
+        finally
+        {
+            _updatingFilter = false;
+        }
+    }
+
+    private void OnGroupFilterChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingFilter)
+        {
+            return;
+        }
+
+        _groupFilter = GroupFilter.SelectedIndex <= 0
+            ? null
+            : GroupFilter.SelectedIndex == 1
+                ? string.Empty
+                : GroupFilter.SelectedItem as string;
+        RefreshBoxes();
+    }
+
     private void UpdateButtons()
     {
         var row = SelectedRow;
@@ -102,6 +164,8 @@ public sealed partial class BoxManagerWindow : Window
         OpenButton.IsEnabled = has;
         RenameButton.IsEnabled = has;
         AppearanceButton.IsEnabled = has;
+        DuplicateButton.IsEnabled = has;
+        GroupButton.IsEnabled = has;
         ShowButton.IsEnabled = has && !row!.Box.IsVisible;
         HideButton.IsEnabled = has && row!.Box.IsVisible;
         UpButton.IsEnabled = has && BoxesList.SelectedIndex > 0;
@@ -185,6 +249,11 @@ public sealed partial class BoxManagerWindow : Window
             }
 
             var box = BoxService.CreateBox(name, type, targetPath);
+            _updatingFilter = true;
+            GroupFilter.SelectedIndex = 0;
+            _groupFilter = null;
+            _updatingFilter = false;
+            RefreshGroupFilter();
             RefreshBoxes();
             BoxesList.SelectedItem = _rows.FirstOrDefault(r => r.Id == box.Id);
             WindowManager.ShowBox(box);
@@ -266,6 +335,52 @@ public sealed partial class BoxManagerWindow : Window
         RefreshBoxes();
     }
 
+    private void OnDuplicate(object sender, RoutedEventArgs e)
+    {
+        if (SelectedRow is not { } row)
+        {
+            return;
+        }
+
+        var copy = BoxService.DuplicateBox(row.Box);
+        var group = BoxGroupService.Get(row.Id);
+        if (!string.IsNullOrEmpty(group))
+        {
+            BoxGroupService.Set(copy.Id, group);
+        }
+
+        RefreshGroupFilter();
+        RefreshBoxes();
+        BoxesList.SelectedItem = _rows.FirstOrDefault(r => r.Id == copy.Id);
+        WindowManager.ShowBox(copy);
+    }
+
+    private async void OnSetGroup(object sender, RoutedEventArgs e)
+    {
+        if (SelectedRow is not { } row)
+        {
+            return;
+        }
+
+        var current = BoxGroupService.Get(row.Id) ?? string.Empty;
+        var group = await Dialogs.PromptAsync(
+            Root,
+            "设置分组",
+            current,
+            "例如：工作 / 设计 / 临时（留空表示取消分组）",
+            "保存",
+            allowEmpty: true,
+            validate: text => text.Length > 40 ? "分组名称不能超过 40 个字符。" : null);
+        if (group is null)
+        {
+            return;
+        }
+
+        BoxGroupService.Set(row.Id, group);
+        RefreshGroupFilter();
+        RefreshBoxes();
+    }
+
     private void OnShow(object sender, RoutedEventArgs e)
     {
         if (SelectedRow is not { } row)
@@ -334,6 +449,7 @@ public sealed partial class BoxManagerWindow : Window
 
         BoxService.DeleteBox(row.Box);
         WindowManager.CloseBoxWindow(row.Id);
+        RefreshGroupFilter();
         RefreshBoxes();
     }
 
@@ -364,15 +480,20 @@ public sealed partial class BoxManagerWindow : Window
 /// <summary>管理器列表行。</summary>
 public sealed class BoxRow
 {
-    public BoxRow(Box box, int count)
+    public BoxRow(Box box, int count, string? group)
     {
         Box = box;
         Count = count;
+        GroupName = group ?? string.Empty;
     }
 
     public Box Box { get; }
 
     public int Count { get; }
+
+    public string GroupName { get; }
+
+    public string GroupText => string.IsNullOrEmpty(GroupName) ? "未分组" : GroupName;
 
     public string Id => Box.Id;
 

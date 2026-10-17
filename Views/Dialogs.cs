@@ -55,7 +55,8 @@ public static class Dialogs
         string placeholder,
         string primaryText = "保存",
         Func<string, string?>? validate = null,
-        bool multiline = false)
+        bool multiline = false,
+        bool allowEmpty = false)
     {
         var box = new TextBox
         {
@@ -91,7 +92,9 @@ public static class Dialogs
         dialog.PrimaryButtonClick += (_, args) =>
         {
             var text = box.Text.Trim();
-            var problem = string.IsNullOrWhiteSpace(text) ? "名称不能为空。" : validate?.Invoke(text);
+            var problem = string.IsNullOrWhiteSpace(text) && !allowEmpty
+                ? "名称不能为空。"
+                : validate?.Invoke(text);
             if (problem is not null)
             {
                 args.Cancel = true;

@@ -81,4 +81,54 @@ public static class ShortcutService
 
         return null;
     }
+
+    /// <summary>创建一个指向目标路径的 .lnk 快捷方式。</summary>
+    public static bool CreateShortcut(
+        string linkPath,
+        string targetPath,
+        string? workingDirectory = null,
+        string? arguments = null,
+        string? description = null)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(linkPath) ?? AppPaths.DesktopPath);
+            var clsid = NativeMethods.CLSID_ShellLink;
+            var iid = NativeMethods.IID_IShellLinkW;
+            var hr = NativeMethods.CoCreateInstance(
+                ref clsid,
+                IntPtr.Zero,
+                NativeMethods.CLSCTX_INPROC_SERVER,
+                ref iid,
+                out var comObject);
+            if (hr != 0 || comObject is null)
+            {
+                return false;
+            }
+
+            var link = (NativeMethods.IShellLinkW)comObject;
+            link.SetPath(targetPath);
+            link.SetWorkingDirectory(
+                string.IsNullOrEmpty(workingDirectory) ? Path.GetDirectoryName(targetPath) ?? string.Empty : workingDirectory);
+            if (!string.IsNullOrEmpty(arguments))
+            {
+                link.SetArguments(arguments);
+            }
+
+            if (!string.IsNullOrEmpty(description))
+            {
+                link.SetDescription(description);
+            }
+
+            var persist = (NativeMethods.IPersistFile)comObject;
+            persist.Save(linkPath, true);
+            LogService.Info($"已创建快捷方式：{Path.GetFileName(linkPath)}");
+            return File.Exists(linkPath);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error("创建快捷方式失败", ex);
+            return false;
+        }
+    }
 }

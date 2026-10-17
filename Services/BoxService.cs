@@ -102,8 +102,39 @@ public static class BoxService
         };
     }
 
-    public static void RenameBox(Box box, string newName)
+    /// <summary>复制收纳盒：只复制外观/类型/排序等配置，不复制收纳项与文件。</summary>
+    public static Box DuplicateBox(Box source)
     {
+        var boxes = BoxRepository.GetAll();
+        var baseName = $"{source.Name} 副本";
+        var name = baseName;
+        var index = 2;
+        while (boxes.Any(b => string.Equals(b.Name, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            name = $"{baseName} {index++}";
+        }
+
+        var copy = new Box
+        {
+            Name = name,
+            Type = source.Type,
+            TargetPath = source.TargetPath,
+            Appearance = source.Appearance.Clone(),
+            Placement = null,
+            ZOrder = BoxRepository.NextZOrder(),
+            IsPinned = source.IsPinned,
+            IsVisible = true,
+            SortField = source.SortField,
+            SortDescending = source.SortDescending,
+            CreatedAt = DateTime.Now,
+        };
+        BoxRepository.Insert(copy);
+        LogService.Info($"已复制收纳盒：{source.Name} -> {copy.Name}");
+        BoxesChanged?.Invoke();
+        return copy;
+    }
+
+    public static void RenameBox(Box box, string newName)    {
         var trimmed = newName.Trim();
         if (string.IsNullOrWhiteSpace(trimmed))
         {
@@ -153,8 +184,7 @@ public static class BoxService
     /// <summary>删除收纳盒：普通盒文件先原位还原；映射/目标盒只移除引用。</summary>
     public static void DeleteBox(Box box)
     {
-        var items = ItemRepository.GetByBox(box.Id);
-        foreach (var item in items)
+        var items = ItemRepository.GetByBox(box.Id);        foreach (var item in items)
         {
             try
             {
@@ -178,6 +208,7 @@ public static class BoxService
 
         ItemRepository.DeleteByBox(box.Id);
         BoxRepository.Delete(box.Id);
+        BoxGroupService.Remove(box.Id);
 
         try
         {

@@ -1129,6 +1129,7 @@ public sealed partial class BoxWindow : Window
         AddMenuItem(flyout, selected.Count > 1 ? $"删除 {selected.Count} 项" : "删除", "\uE74D", DeleteSelectedAsync, true, "Del");
         flyout.Items.Add(new MenuFlyoutSeparator());
         AddMenuItem(flyout, "复制路径", "\uE8C8", CopyPathsAsync);
+        AddMenuItem(flyout, "创建快捷方式", "\uE71B", CreateShortcutAsync, selected.Count == 1);
 
         var moveMenu = new MenuFlyoutSubItem { Text = "移动到其他盒" };
         var others = BoxService.GetBoxes().Where(b => b.Id != _box.Id && b.Type == _box.Type).ToList();
@@ -1595,8 +1596,54 @@ public sealed partial class BoxWindow : Window
         }
     }
 
-    private async void CopyPathsAsync()
+    private async void CreateShortcutAsync()
     {
+        var selected = GetSelectedItems();
+        if (selected.Count != 1)
+        {
+            return;
+        }
+
+        var item = selected[0];
+        string? target = null;
+        string? url = null;
+        if (item.Kind == ItemKind.Url)
+        {
+            url = item.ShortcutTarget;
+            if (string.IsNullOrEmpty(url) && item.HasRealPath && File.Exists(item.RealPath))
+            {
+                url = ShortcutService.ReadUrl(item.RealPath);
+            }
+        }
+        else if (item.HasRealPath && PathUtil.Exists(item.RealPath))
+        {
+            target = item.RealPath;
+        }
+
+        if (string.IsNullOrEmpty(url) && string.IsNullOrEmpty(target))
+        {
+            ShowInfo("无法创建快捷方式", "收纳项的路径不可用。", InfoBarSeverity.Warning);
+            return;
+        }
+
+        var created = ShellService.CreateShortcutOnDesktop(item.DisplayName, target, url);
+        if (created is null)
+        {
+            ShowInfo("创建快捷方式失败", "无法在桌面写入快捷方式。", InfoBarSeverity.Error);
+            return;
+        }
+
+        await Task.CompletedTask;
+        ShowInfo(
+            "已创建快捷方式",
+            Path.GetFileName(created),
+            InfoBarSeverity.Success,
+            actionText: "打开所在位置",
+            action: () => ShellService.RevealInExplorer(created),
+            autoCloseMs: 5000);
+    }
+
+    private async void CopyPathsAsync()    {
         var paths = GetSelectedItems().Select(i => i.RealPath).Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
         if (paths.Count == 0)
         {

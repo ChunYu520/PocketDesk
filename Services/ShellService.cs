@@ -184,4 +184,33 @@ public static class ShellService
             return null;
         }
     }
+
+    /// <summary>在桌面创建指向目标文件/文件夹的快捷方式，或网址的 .url 文件。</summary>
+    public static string? CreateShortcutOnDesktop(string displayName, string? targetPath, string? url)
+    {
+        try
+        {
+            var baseName = PathUtil.SanitizeFileName($"{displayName} - 快捷方式", "快捷方式");
+            if (!string.IsNullOrEmpty(url))
+            {
+                FileSystemService.WriteUrlShortcut(AppPaths.DesktopPath, url, baseName, out var createdUrl);
+                return createdUrl;
+            }
+
+            if (string.IsNullOrEmpty(targetPath) || !PathUtil.Exists(targetPath))
+            {
+                return null;
+            }
+
+            var linkPath = PathUtil.UniquePathIn(AppPaths.DesktopPath, baseName + ".lnk");
+            return ShortcutService.CreateShortcut(linkPath, targetPath, Path.GetDirectoryName(targetPath), null, displayName)
+                ? linkPath
+                : null;
+        }
+        catch (Exception ex)
+        {
+            LogService.Error("创建桌面快捷方式失败", ex);
+            return null;
+        }
+    }
 }

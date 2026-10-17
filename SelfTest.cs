@@ -122,6 +122,30 @@ public static class SelfTest
             AppearancePresetService.Delete("自测预设");
             Check("外观预设删除", AppearancePresetService.Load().All(p => p.Name != "自测预设"));
 
+            var shortcutTarget = Path.Combine(source, "shortcut-target.txt");
+            File.WriteAllText(shortcutTarget, "shortcut");
+            var shortcutPath = Path.Combine(source, "shortcut-test.lnk");
+            var createdShortcut = ShortcutService.CreateShortcut(shortcutPath, shortcutTarget, source, null, "self test");
+            var resolvedShortcut = ShortcutService.Resolve(shortcutPath);
+            Check("创建快捷方式并可解析",
+                createdShortcut && resolvedShortcut.TargetPath is not null &&
+                PathUtil.SamePath(resolvedShortcut.TargetPath, shortcutTarget));
+
+            var duplicated = BoxService.DuplicateBox(box);
+            Check("复制收纳盒仅复制配置",
+                duplicated.Id != box.Id &&
+                duplicated.Type == box.Type &&
+                ItemRepository.GetByBox(duplicated.Id).Count == 0 &&
+                duplicated.Name.Contains("副本", StringComparison.Ordinal));
+
+            BoxGroupService.Set(box.Id, "自测分组");
+            Check("收纳盒分组保存与枚举",
+                BoxGroupService.Get(box.Id) == "自测分组" &&
+                BoxGroupService.DistinctGroups().Contains("自测分组"));
+            BoxGroupService.Remove(box.Id);
+            Check("收纳盒分组移除", BoxGroupService.Get(box.Id) is null);
+            BoxService.DeleteBox(duplicated);
+
             var recoverFrom = Path.Combine(source, "recover.txt");
             var recoverTo = Path.Combine(AppPaths.BoxStorage(box.Id), "recover.txt");
             File.WriteAllText(recoverFrom, "recover");
