@@ -130,7 +130,7 @@ Views/
 
 - **磁力访问窗、快速面板**未实现（PRD 已列为 P1）。
 - **导入/导出/完整备份**未实现（P1）；目前仅有诊断日志导出。
-- **Native AOT** 未启用：WinUI 3 的 COM/WinRT 与 `System.Text.Json` 反射需改造为源生成器，并需逐库验证裁剪；当前 Release 为自包含、不裁剪。
+- **Native AOT** 暂未打通。项目已预留 `dotnet publish -c Release -r win-x64 -p:AotPublish=true` 开关，但当前 `WinAppSDK 2.5.1 + WinUI 2.3.9` 组合下，XAML 编译器在 Pass1 即报 `WMC1007 Cannot resolve metadata for WinUI types`；`WindowsAppSDKSelfContained` 开/关、`PublishTrimmed` 开/关、显式 CsWinRT 2.3.1、`net8.0-windows` 与 `net10.0-windows` 目标均复现。Release 仍为自包含、不裁剪；需要更换到 PRD 基线的 WinAppSDK 1.6/1.7 + .NET 8 工具链后再验证 AOT。
 - **安装包**未做（MSIX / Inno Setup），当前直接运行发布目录。
 - 目标盒同步为单向补充（外部新增会显示，外部删除不会自动移除记录），完整双向同步待完善。
 - 自定义排序已支持菜单上移/下移，尚不支持直接拖拽图标调整顺序。

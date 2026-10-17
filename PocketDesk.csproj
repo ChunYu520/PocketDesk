@@ -71,12 +71,24 @@
     <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
   </PropertyGroup>
 
+  <!--
+    Native AOT 选项。必须在 restore 阶段就可见（Windows App SDK 的发布目标会在还原时检查），
+    因此通过显式开关控制：dotnet publish -c Release -r win-x64 -p:AotPublish=true
+  -->
+  <PropertyGroup Condition="'$(AotPublish)' == 'true'">
+    <PublishAot>true</PublishAot>
+    <PublishTrimmed>true</PublishTrimmed>
+    <SelfContained>true</SelfContained>
+    <EnableUnsafeBlocks>true</EnableUnsafeBlocks>
+    <PublishSingleFile>false</PublishSingleFile>
+  </PropertyGroup>
+
   <!-- Publish Properties -->
   <PropertyGroup>
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
     <!-- WinUI 3 的裁剪/AOT 需要逐库验证，当前 Release 先关闭裁剪，避免误裁反射与 WinRT 元数据。 -->
-    <PublishTrimmed>False</PublishTrimmed>
+    <PublishTrimmed Condition="'$(AotPublish)' != 'true'">False</PublishTrimmed>
     <!-- Release 同时自包含 .NET 运行时，便于在未安装 .NET 的机器上直接运行。 -->
     <SelfContained Condition="'$(Configuration)' != 'Debug'">true</SelfContained>
   </PropertyGroup>
