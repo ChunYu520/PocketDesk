@@ -28,7 +28,7 @@
 - 统一设置（常规/外观/行为/存储/关于）、诊断日志导出
 - SQLite schema 版本 + 迁移前自动备份（保留 3 份）
 
-尚未实现（详见“已知限制”）：磁力访问窗、快速面板、导入导出/全量备份、首次启动向导、中英文资源化、Native AOT、安装包。
+尚未实现（详见“已知限制”）：磁力访问窗、快速面板、导入导出/全量备份、首次启动向导、中英文资源化、Native AOT。
 
 ![收纳盒管理器](docs/manager.png)
 ![设置](docs/settings.png)
@@ -50,6 +50,29 @@ dotnet build -p:Platform=x64
   # 输出：bin\Release\net10.0-windows10.0.26100.0\win-x64\publish
   ```
 - 当前采用未打包（`WindowsPackageType=None`）交付，数据写入真实的 `%LOCALAPPDATA%\PocketDesk`，不受 MSIX 文件系统虚拟化影响。后续如需 MSIX，建议单独建立打包工程。
+
+## 安装包
+
+`..\Pack\` 下提供三个架构的 Inno Setup 安装包（按当前用户安装，无需管理员权限）：
+
+| 文件 | 适用平台 |
+|---|---|
+| `PocketDesk-1.0.0-ARM64-Setup.exe` | Windows on ARM（原生） |
+| `PocketDesk-1.0.0-x86-Setup.exe` | 32 位 Windows（也可在 x64/ARM64 上兼容运行） |
+| `PocketDesk-1.0.0-x64-Setup.exe` | 64 位 Intel/AMD（可选） |
+
+- 默认安装到 `%LOCALAPPDATA%\Programs\PocketDesk`，开始菜单快捷方式；桌面快捷方式为可选任务。
+- 卸载时询问“还原普通盒文件 / 保留数据 / 删除全部数据”，默认保留数据；静默卸载也保留数据。
+- 安装包未做代码签名，SmartScreen 会提示，需“更多信息 → 仍要运行”。
+- 安装脚本：[installer/PocketDesk.iss](installer/PocketDesk.iss)
+
+```powershell
+dotnet publish -c Release -p:Platform=ARM64
+dotnet publish -c Release -p:Platform=x86
+
+ISCC.exe /DBuildArch=arm64 installer\PocketDesk.iss
+ISCC.exe /DBuildArch=x86   installer\PocketDesk.iss
+```
 
 ## 首次使用
 
@@ -135,7 +158,7 @@ Views/
 - **磁力访问窗、快速面板**未实现（PRD 已列为 P1）。
 - **导入/导出/完整备份**未实现（P1）；目前仅有诊断日志导出。
 - **Native AOT** 暂未打通。项目已预留 `dotnet publish -c Release -r win-x64 -p:AotPublish=true` 开关，但当前 `WinAppSDK 2.5.1 + WinUI 2.3.9` 组合下，XAML 编译器在 Pass1 即报 `WMC1007 Cannot resolve metadata for WinUI types`；`WindowsAppSDKSelfContained` 开/关、`PublishTrimmed` 开/关、显式 CsWinRT 2.3.1、`net8.0-windows` 与 `net10.0-windows` 目标均复现。Release 仍为自包含、不裁剪；需要更换到 PRD 基线的 WinAppSDK 1.6/1.7 + .NET 8 工具链后再验证 AOT。
-- **安装包**未做（MSIX / Inno Setup），当前直接运行发布目录。
+- **MSIX** 未做；当前提供 Inno Setup 安装包（ARM64 / x86 / x64），尚未做代码签名，SmartScreen 会提示未知发布者。
 - 目标盒同步为单向补充（外部新增会显示，外部删除不会自动移除记录），完整双向同步待完善。
 - 自定义排序已支持菜单上移/下移，尚不支持直接拖拽图标调整顺序。
 - 框选暂不支持滚动时自动扩展选择范围；虚拟化到屏幕外的项目需滚动后重新框选。

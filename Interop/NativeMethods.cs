@@ -473,6 +473,7 @@ internal static class NativeMethods
 
     internal const uint MB_OK = 0x00000000;
     internal const uint MB_ICONERROR = 0x00000010;
+    internal const uint MB_ICONWARNING = 0x00000030;
     internal const uint MB_ICONINFORMATION = 0x00000040;
     internal const uint MB_SETFOREGROUND = 0x00010000;
 

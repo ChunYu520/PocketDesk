@@ -16,6 +16,16 @@ public partial class App : Application
 
     protected override async void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
+        var uninstallArgument = Environment.GetCommandLineArgs()
+            .FirstOrDefault(a => a.StartsWith("--uninstall=", StringComparison.OrdinalIgnoreCase));
+        if (uninstallArgument is not null)
+        {
+            var mode = uninstallArgument["--uninstall=".Length..];
+            var uninstallCode = UninstallService.Run(mode);
+            Environment.Exit(uninstallCode);
+            return;
+        }
+
         if (Environment.GetCommandLineArgs().Any(a => string.Equals(a, "--selftest", StringComparison.OrdinalIgnoreCase)))
         {
             var exitCode = await SelfTest.RunAsync();
