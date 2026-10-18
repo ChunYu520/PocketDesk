@@ -362,9 +362,26 @@ public sealed partial class BoxWindow : Window
             {
                 SystemBackdrop = null;
             }
+            else if (material == MaterialKind.Acrylic)
+            {
+                var light = RootGrid.RequestedTheme == ElementTheme.Light ||
+                            (RootGrid.RequestedTheme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Light);
+                var opacity = Math.Clamp(_box.Appearance.BackgroundOpacity, 0.05, 1.0);
+                SystemBackdrop = new AdjustableAcrylicBackdrop(
+                    light ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black,
+                    opacity * 0.55,
+                    0.35);
+            }
             else if (material == MaterialKind.Transparent)
             {
-                SystemBackdrop = new DesktopAcrylicBackdrop();
+                var light = RootGrid.RequestedTheme == ElementTheme.Light ||
+                            (RootGrid.RequestedTheme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Light);
+                var opacity = Math.Clamp(_box.Appearance.BackgroundOpacity, 0.05, 1.0);
+                // 磨砂玻璃：比亚克力更厚的 tint，仍然受同一个背景不透明度滑条控制。
+                SystemBackdrop = new AdjustableAcrylicBackdrop(
+                    light ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black,
+                    opacity * 0.85,
+                    0.6);
             }
             else if (material == MaterialKind.Mica && MicaController.IsSupported())
             {

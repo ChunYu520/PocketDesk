@@ -1,4 +1,4 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Text;
 
 namespace PocketDesk;
@@ -117,7 +117,7 @@ public static class AppInfo
     public static string Version =>
         typeof(AppInfo).Assembly.GetName().Version is { } v
             ? $"{v.Major}.{v.Minor}.{v.Build}"
-            : "1.1.1";
+            : "1.1.2";
 
     public const string ProductName = "PocketDesk";
 }

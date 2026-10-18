@@ -2,11 +2,11 @@
 
 桌面上的原生收纳层，而不是另一个文件管理器。基于 **WinUI 3 + Windows App SDK + .NET 10 + SQLite** 实现。
 
-当前版本：**1.1.1**（2026-10）
+当前版本：**1.1.2**（2026-10）
 
 ![普通收纳盒](docs/box-normal.png)
 
-## 1.1.1 更新
+## 1.1.2 更新
 
 - 材质新增 **磨砂玻璃**：系统 Acrylic 磨砂 + 背景不透明度可调 + 35% 半透明圆角边框
 - 材质选项：跟随全局 / Mica / 亚克力 / 纯色 / 磨砂玻璃；修复全局材质对已有收纳盒不生效的问题，点击“把默认外观应用到所有收纳盒”会清除单盒材质/主题覆盖
@@ -75,8 +75,8 @@ dotnet build -p:Platform=ARM64
 
 | 文件 | 适用平台 |
 |---|---|
-| `PocketDesk-1.1.1-ARM64.msi` | Windows on ARM（原生） |
-| `PocketDesk-1.1.1-x64.msi` | 64 位 Intel/AMD |
+| `PocketDesk-1.1.2-ARM64.msi` | Windows on ARM（原生） |
+| `PocketDesk-1.1.2-x64.msi` | 64 位 Intel/AMD |
 
 - MSI 带中文安装向导：欢迎 → 许可协议 → 自定义安装（功能选择） → 安装 → 完成。
 - “自定义安装”中可勾选/取消 **桌面快捷方式**；开始菜单快捷方式始终创建。
@@ -94,7 +94,7 @@ wix build -arch arm64 -ext WixToolset.UI.wixext `
   -loc installer\WixUI_zh-CN.wxl `
   -d PublishDir=bin\Release\net10.0-windows10.0.26100.0\win-arm64\publish `
   -d LicenseFile=installer\License.rtf `
-  -o ..\Pack\PocketDesk-1.1.1-ARM64.msi installer\PocketDesk.wxs
+  -o ..\Pack\PocketDesk-1.1.2-ARM64.msi installer\PocketDesk.wxs
 ```
 
 > 为了让 MSI 以当前用户安装，构建后把 MSI Summary Information 的 Word Count 提权位（0x8）清零；否则 Windows Installer 会按 per-machine 处理。
