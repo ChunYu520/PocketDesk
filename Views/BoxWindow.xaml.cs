@@ -96,9 +96,6 @@ public sealed partial class BoxWindow : Window
         ItemsView.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(OnMarqueePointerMoved), true);
         ItemsView.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnMarqueePointerReleased), true);
         ItemsView.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(OnMarqueePointerReleased), true);
-        ItemsView.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(OnReorderPointerMoved), true);
-        ItemsView.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnReorderPointerReleased), true);
-        ItemsView.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(OnReorderPointerReleased), true);
         ReloadItems();
 
         // 窗口显示后再应用位置：非激活显示（ShowAll / 启动恢复）不会触发 Activated。
@@ -480,7 +477,7 @@ public sealed partial class BoxWindow : Window
         ItemsView.ItemTemplate = (DataTemplate)RootGrid.Resources[list ? "ListItemTemplate" : "GridItemTemplate"];
         ItemsView.ItemsPanel = (ItemsPanelTemplate)RootGrid.Resources[list ? "ListPanelTemplate" : "GridPanelTemplate"];
 
-        var style = new Style(typeof(ListViewItem));
+        var style = new Style(typeof(GridViewItem));
         style.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(2)));
         style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0)));
         style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
@@ -1098,7 +1095,7 @@ public sealed partial class BoxWindow : Window
         var target = _items.Count;
         for (var i = 0; i < _items.Count; i++)
         {
-            if (ItemsView.ContainerFromIndex(i) is not ListViewItem container)
+            if (ItemsView.ContainerFromIndex(i) is not GridViewItem container)
             {
                 continue;
             }
@@ -1169,7 +1166,7 @@ public sealed partial class BoxWindow : Window
 
                 if (payload.BoxId == _box.Id)
                 {
-                    ReorderWithinBox(payload.ItemIds, e.GetPosition(ItemsView));
+                    // 同盒整块拖动由 GridView 原生重排处理。
                     return;
                 }
 
@@ -1288,34 +1285,7 @@ public sealed partial class BoxWindow : Window
 
     private void OnDragItemsStarting(object sender, DragItemsStartingEventArgs e)
     {
-        var items = e.Items.OfType<BoxItem>().Where(i => i.HasRealPath && PathUtil.Exists(i.RealPath)).ToList();
-        if (items.Count == 0)
-        {
-            e.Cancel = true;
-            return;
-        }
-
-        var payload = new InternalDragPayload { BoxId = _box.Id, ItemIds = items.Select(i => i.Id).ToList() };
-        e.Data.SetData(InternalDragFormat, Json.Serialize(payload));
-        e.Data.RequestedOperation = DataPackageOperation.Copy;
-
-        var storageItems = items
-            .Select(i => i.StorageItem)
-            .Where(i => i is not null)
-            .Select(i => i!)
-            .ToList();
-
-        if (storageItems.Count > 0)
-        {
-            try
-            {
-                e.Data.SetStorageItems(storageItems, false);
-            }
-            catch (Exception ex)
-            {
-                LogService.Warn($"设置拖出文件失败：{ex.GetType().Name}");
-            }
-        }
+        // 使用 GridView 原生整块磁贴拖动重排，不注入自定义 DataPackage。
     }
 
     // ---------------- 菜单 ----------------
@@ -2189,7 +2159,7 @@ public sealed partial class BoxWindow : Window
 
     private void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
-        if (args.ItemContainer is ListViewItem container)
+        if (args.ItemContainer is GridViewItem container)
         {
             container.PointerPressed -= OnReorderPointerPressed;
             container.PointerPressed += OnReorderPointerPressed;
@@ -2245,7 +2215,7 @@ public sealed partial class BoxWindow : Window
         {
             _reorderActive = true;
             ItemsView.CapturePointer(e.Pointer);
-            if (ItemsView.ContainerFromItem(_reorderItem) is ListViewItem container)
+            if (ItemsView.ContainerFromItem(_reorderItem) is GridViewItem container)
             {
                 container.Opacity = 0.55;
             }
@@ -2277,7 +2247,7 @@ public sealed partial class BoxWindow : Window
         var target = _items.Count;
         for (var i = 0; i < _items.Count; i++)
         {
-            if (ItemsView.ContainerFromIndex(i) is not ListViewItem container)
+            if (ItemsView.ContainerFromIndex(i) is not GridViewItem container)
             {
                 continue;
             }
@@ -2315,7 +2285,7 @@ public sealed partial class BoxWindow : Window
             return;
         }
 
-        if (ItemsView.ContainerFromItem(item) is ListViewItem container)
+        if (ItemsView.ContainerFromItem(item) is GridViewItem container)
         {
             container.Opacity = 1;
         }

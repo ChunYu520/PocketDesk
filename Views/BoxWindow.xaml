@@ -55,14 +55,6 @@
                               HorizontalAlignment="Right"
                               VerticalAlignment="Top"
                               Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                    <FontIcon Glyph="&#xE700;"
-                              FontSize="12"
-                              Opacity="0.6"
-                              HorizontalAlignment="Left"
-                              VerticalAlignment="Bottom"
-                              ToolTipService.ToolTip="拖动排序"
-                              AutomationProperties.Name="拖动排序"
-                              PointerPressed="OnGripPointerPressed" />
                 </Grid>
 
                 <TextBlock Grid.Row="1"
@@ -183,13 +175,14 @@
 
         <!-- 内容区 -->
         <Grid x:Name="ContentRoot" Grid.Row="1">
-            <ListView x:Name="ItemsView"
+            <GridView x:Name="ItemsView"
                       Background="Transparent"
                       Padding="8,2,8,8"
                       SelectionMode="Extended"
                       AllowDrop="True"
                       CanDragItems="True"
-                      CanReorderItems="False"
+                      CanReorderItems="True"
+                      DragItemsCompleted="OnItemsDragCompleted"
                       IsItemClickEnabled="False"
                       HorizontalAlignment="Stretch"
                       AutomationProperties.Name="收纳盒内容"
@@ -205,12 +198,12 @@
                       RightTapped="OnListRightTapped"
                       KeyDown="OnListKeyDown"
                       SizeChanged="OnItemsViewSizeChanged">
-                <ListView.ItemsPanel>
+                <GridView.ItemsPanel>
                     <ItemsPanelTemplate>
                         <ItemsWrapGrid Orientation="Horizontal" />
                     </ItemsPanelTemplate>
-                </ListView.ItemsPanel>
-            </ListView>
+                </GridView.ItemsPanel>
+            </GridView>
 
             <!-- 框选覆盖层 -->
             <Canvas x:Name="SelectionCanvas" IsHitTestVisible="False">
