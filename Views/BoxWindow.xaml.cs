@@ -96,6 +96,9 @@ public sealed partial class BoxWindow : Window
         ItemsView.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(OnMarqueePointerMoved), true);
         ItemsView.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnMarqueePointerReleased), true);
         ItemsView.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(OnMarqueePointerReleased), true);
+        ItemsView.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(OnReorderPointerMoved), true);
+        ItemsView.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnReorderPointerReleased), true);
+        ItemsView.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(OnReorderPointerReleased), true);
         ReloadItems();
 
         // 窗口显示后再应用位置：非激活显示（ShowAll / 启动恢复）不会触发 Activated。
@@ -2191,6 +2194,21 @@ public sealed partial class BoxWindow : Window
             container.PointerPressed -= OnReorderPointerPressed;
             container.PointerPressed += OnReorderPointerPressed;
         }
+    }
+
+    private void OnGripPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not BoxItem item)
+        {
+            return;
+        }
+
+        _reorderItem = item;
+        _reorderStart = e.GetCurrentPoint(ItemsView).Position;
+        _reorderActive = false;
+        ItemsView.CapturePointer(e.Pointer);
+        e.Handled = true;
+        LogService.Info($"拖动把手按下：{item.DisplayName}");
     }
 
     private void OnReorderPointerPressed(object sender, PointerRoutedEventArgs e)

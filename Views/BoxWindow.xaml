@@ -55,6 +55,14 @@
                               HorizontalAlignment="Right"
                               VerticalAlignment="Top"
                               Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                    <FontIcon Glyph="&#xE700;"
+                              FontSize="12"
+                              Opacity="0.6"
+                              HorizontalAlignment="Left"
+                              VerticalAlignment="Bottom"
+                              ToolTipService.ToolTip="拖动排序"
+                              AutomationProperties.Name="拖动排序"
+                              PointerPressed="OnGripPointerPressed" />
                 </Grid>
 
                 <TextBlock Grid.Row="1"
@@ -181,8 +189,7 @@
                       SelectionMode="Extended"
                       AllowDrop="True"
                       CanDragItems="True"
-                      CanReorderItems="True"
-                      DragItemsCompleted="OnItemsDragCompleted"
+                      CanReorderItems="False"
                       IsItemClickEnabled="False"
                       HorizontalAlignment="Stretch"
                       AutomationProperties.Name="收纳盒内容"
