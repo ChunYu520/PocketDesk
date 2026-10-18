@@ -9,7 +9,7 @@
     mc:Ignorable="d"
     Title="PocketDesk">
 
-    <Grid x:Name="RootGrid" Background="Transparent">
+    <Grid x:Name="RootGrid" Background="Transparent" AllowFocusOnInteraction="False">
         <Grid.Resources>
         <ItemsPanelTemplate x:Key="GridPanelTemplate">
             <ItemsWrapGrid Orientation="Horizontal" />
@@ -116,13 +116,7 @@
         <Border x:Name="BackgroundLayer"
                 Grid.RowSpan="3"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                IsHitTestVisible="False">
-            <Image x:Name="WallpaperImage"
-                   Stretch="Fill"
-                   HorizontalAlignment="Left"
-                   VerticalAlignment="Top"
-                   IsHitTestVisible="False" />
-        </Border>
+                IsHitTestVisible="False" />
         <Border x:Name="TintLayer"
                 Grid.RowSpan="3"
                 Background="#000000"
@@ -188,6 +182,7 @@
         <Grid x:Name="ContentRoot" Grid.Row="1">
             <ListView x:Name="ItemsView"
                       Background="Transparent"
+                      AllowFocusOnInteraction="False"
                       Padding="8,2,8,8"
                       SelectionMode="Extended"
                       AllowDrop="True"

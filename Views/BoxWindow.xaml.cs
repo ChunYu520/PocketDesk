@@ -30,6 +30,9 @@ public sealed partial class BoxWindow : Window
     private bool _closed;
     private bool _forceClose;
     private int _backdropGeneration;
+    private int _interactiveDepth;
+    private readonly NativeMethods.SubclassProc _subclassProc;
+    private DispatcherQueueTimer? _wallpaperRefreshTimer;
     private bool _isRolledUp;
     private bool _placementApplied;
     private int _expandedHeight = 320;
@@ -52,6 +55,7 @@ public sealed partial class BoxWindow : Window
     {
         _box = box;
         _interaction = new BoxImportInteraction(this);
+        _subclassProc = BoxSubclassProc;
         InitializeComponent();
 
         Title = box.Name;
@@ -85,6 +89,11 @@ public sealed partial class BoxWindow : Window
         _dropOverlayTimer.Interval = TimeSpan.FromMilliseconds(1200);
         _dropOverlayTimer.IsRepeating = false;
         _dropOverlayTimer.Tick += (_, _) => DropOverlay.Visibility = Visibility.Collapsed;
+
+        _wallpaperRefreshTimer = DispatcherQueue.CreateTimer();
+        _wallpaperRefreshTimer.Interval = TimeSpan.FromMilliseconds(220);
+        _wallpaperRefreshTimer.IsRepeating = false;
+        _wallpaperRefreshTimer.Tick += (_, _) => ApplyBackdrop();
 
         ItemsView.ItemsSource = _items;
         RootGrid.Loaded += OnRootGridLoaded;
@@ -127,7 +136,8 @@ public sealed partial class BoxWindow : Window
             NativeMethods.SetWindowLongPtrSafe(
                 hwnd,
                 NativeMethods.GWL_EXSTYLE,
-                (IntPtr)(exStyle | NativeMethods.WS_EX_TOOLWINDOW));
+                (IntPtr)(exStyle | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE));
+            NativeMethods.SetWindowSubclass(hwnd, _subclassProc, 1, IntPtr.Zero);
             LogService.Info(
                 $"收纳盒窗口初始化：{AppWindow.Size.Width}x{AppWindow.Size.Height}px，" +
                 $"DPI {DpiUtil.WindowDpi(hwnd)}，shownInSwitchers={AppWindow.IsShownInSwitchers}");
@@ -157,7 +167,6 @@ public sealed partial class BoxWindow : Window
         DragArea.PointerCaptureLost += OnDragAreaPointerReleased;
 
         BoxService.BoxesChanged += OnBoxesChanged;
-        BackgroundLayer.SizeChanged += (_, _) => UpdateWallpaperImagePosition();
     }
 
     private void OnFirstActivated(object sender, WindowActivatedEventArgs args)
@@ -210,6 +219,81 @@ public sealed partial class BoxWindow : Window
         {
             LogService.Warn($"切换桌面模式失败：{ex.GetType().Name}");
         }
+    }
+
+    private IntPtr _previousForeground = IntPtr.Zero;
+
+    /// <summary>进入输入/菜单交互：临时解除 WS_EX_NOACTIVATE，允许键盘输入。</summary>
+    public void BeginInteractive()
+    {
+        if (_closed)
+        {
+            return;
+        }
+
+        if (_interactiveDepth == 0)
+        {
+            _previousForeground = NativeMethods.GetForegroundWindow();
+        }
+
+        _interactiveDepth++;
+        try
+        {
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            var ex = NativeMethods.GetWindowLongPtrSafe(hwnd, NativeMethods.GWL_EXSTYLE).ToInt64();
+            NativeMethods.SetWindowLongPtrSafe(hwnd, NativeMethods.GWL_EXSTYLE, (IntPtr)(ex & ~NativeMethods.WS_EX_NOACTIVATE));
+            NativeMethods.SetForegroundWindow(hwnd);
+            Activate();
+        }
+        catch (Exception ex)
+        {
+            LogService.Warn($"临时激活收纳盒失败：{ex.GetType().Name}");
+        }
+    }
+
+    /// <summary>输入/菜单结束：恢复 WS_EX_NOACTIVATE 并让出焦点。</summary>
+    public void EndInteractive()
+    {
+        if (_closed || _interactiveDepth == 0)
+        {
+            return;
+        }
+
+        _interactiveDepth--;
+        if (_interactiveDepth > 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            var ex = NativeMethods.GetWindowLongPtrSafe(hwnd, NativeMethods.GWL_EXSTYLE).ToInt64();
+            NativeMethods.SetWindowLongPtrSafe(hwnd, NativeMethods.GWL_EXSTYLE, (IntPtr)(ex | NativeMethods.WS_EX_NOACTIVATE));
+            if (_previousForeground != IntPtr.Zero && _previousForeground != hwnd)
+            {
+                NativeMethods.SetForegroundWindow(_previousForeground);
+            }
+
+            if (!_box.IsPinned)
+            {
+                SendToBack();
+            }
+        }
+        catch (Exception ex)
+        {
+            LogService.Warn($"恢复收纳盒焦点状态失败：{ex.GetType().Name}");
+        }
+    }
+
+    private IntPtr BoxSubclassProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr id, IntPtr data)
+    {
+        if (msg == NativeMethods.WM_MOUSEACTIVATE && _interactiveDepth == 0)
+        {
+            return (IntPtr)NativeMethods.MA_NOACTIVATE;
+        }
+
+        return NativeMethods.DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 
     /// <summary>把窗口压到 z 序最底层，形成“贴着壁纸”的桌面层效果。</summary>
@@ -340,62 +424,39 @@ public sealed partial class BoxWindow : Window
         }
     }
 
-    /// <summary>截取桌面壁纸层整屏图，并按窗口在屏幕上的位置平移，显示“盒子后面那一块”。</summary>
+    /// <summary>从桌面壁纸整屏图中裁剪窗口所在局部，直接作为背景刷。</summary>
     private async Task<bool> TryApplyWallpaper(int generation)
     {
-        var snapshot = await DesktopCaptureService.GetAsync();
-        if (snapshot is null || generation != _backdropGeneration || _closed)
+        var position = AppWindow.Position;
+        var size = AppWindow.Size;
+        var source = await DesktopCaptureService.GetCropAsync(
+            position.X,
+            position.Y,
+            size.Width,
+            size.Height);
+        if (source is null || generation != _backdropGeneration || _closed)
         {
             return false;
         }
 
-        WallpaperImage.Source = snapshot.Source;
-        WallpaperImage.Visibility = Visibility.Visible;
-        BackgroundLayer.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        BackgroundLayer.Background = new ImageBrush
+        {
+            ImageSource = source,
+            Stretch = Stretch.Fill,
+        };
         BackgroundLayer.Visibility = Visibility.Visible;
         TintLayer.Visibility = Visibility.Visible;
         RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         SystemBackdrop = null;
-        UpdateWallpaperImagePosition();
         return true;
-    }
-
-    private void UpdateWallpaperImagePosition()
-    {
-        if (WallpaperImage.Source is null || RootGrid.XamlRoot is null)
-        {
-            return;
-        }
-
-        var scale = RootGrid.XamlRoot.RasterizationScale;
-        if (scale <= 0)
-        {
-            scale = 1;
-        }
-
-        var screenWidth = NativeMethods.GetSystemMetrics(0);
-        var screenHeight = NativeMethods.GetSystemMetrics(1);
-        var position = AppWindow.Position;
-        WallpaperImage.Width = screenWidth / scale + 200;
-        WallpaperImage.Height = screenHeight / scale + 200;
-        WallpaperImage.RenderTransform = new TranslateTransform
-        {
-            X = -position.X / scale,
-            Y = -position.Y / scale,
-        };
-        BackgroundLayer.Clip = new RectangleGeometry
-        {
-            Rect = new Rect(0, 0, BackgroundLayer.ActualWidth, BackgroundLayer.ActualHeight),
-        };
     }
 
     private void ApplySolidScene()
     {
         _backdropGeneration++;
-        WallpaperImage.Source = null;
-        WallpaperImage.Visibility = Visibility.Collapsed;
         SystemBackdrop = null;
         RootGrid.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
+        BackgroundLayer.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
         BackgroundLayer.Visibility = Visibility.Collapsed;
         TintLayer.Visibility = Visibility.Collapsed;
     }
@@ -429,8 +490,10 @@ public sealed partial class BoxWindow : Window
 
     private void ApplyAppearance()
     {
-        var appearance = _box.Appearance;        var radius = new CornerRadius(Math.Clamp(appearance.CornerRadius, 0, 24));
+        var appearance = _box.Appearance;
+        var radius = new CornerRadius(Math.Clamp(appearance.CornerRadius, 0, 24));
         BackgroundLayer.CornerRadius = radius;
+        TintLayer.CornerRadius = radius;
         BorderLayer.CornerRadius = radius;
         BackgroundLayer.Opacity = appearance.BackgroundOpacity;
         BorderLayer.Opacity = appearance.BorderOpacity;
@@ -569,7 +632,8 @@ public sealed partial class BoxWindow : Window
     {
         if (args.DidPositionChange || args.DidSizeChange)
         {
-            UpdateWallpaperImagePosition();
+            _wallpaperRefreshTimer?.Stop();
+            _wallpaperRefreshTimer?.Start();
             if (!_isRolledUp && AppWindow.Size.Height > 80)
             {
                 _expandedHeight = AppWindow.Size.Height;
@@ -1021,6 +1085,17 @@ public sealed partial class BoxWindow : Window
         _infoTimer.Stop();
         _undoTimer.Stop();
         _dropOverlayTimer.Stop();
+        _wallpaperRefreshTimer?.Stop();
+        try
+        {
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            NativeMethods.RemoveWindowSubclass(hwnd, _subclassProc, 1);
+        }
+        catch
+        {
+            // 窗口可能已销毁。
+        }
+
         BoxService.BoxesChanged -= OnBoxesChanged;
         WindowManager.OnBoxWindowClosed(_box.Id);
     }
@@ -1400,7 +1475,7 @@ public sealed partial class BoxWindow : Window
         AddMenuItem(flyout, "属性", "\uE946", () => ShellService.ShowProperties(
             WinRT.Interop.WindowNative.GetWindowHandle(this), selected[0].RealPath), selected.Count == 1);
 
-        flyout.ShowAt(ItemsView, position);
+        ShowFlyoutInteractive(flyout, ItemsView, position);
     }
 
     private void ShowBoxMenu(Point position)
@@ -1505,7 +1580,7 @@ public sealed partial class BoxWindow : Window
         flyout.Items.Add(new MenuFlyoutSeparator());
         AddMenuItem(flyout, "删除收纳盒…", "\uE74D", DeleteBoxAsync);
 
-        flyout.ShowAt(ItemsView, position);
+        ShowFlyoutInteractive(flyout, ItemsView, position);
     }
 
     private static void AddMenuItem(
@@ -1562,6 +1637,20 @@ public sealed partial class BoxWindow : Window
         {
             LogService.Error("菜单动作失败", ex);
         }
+    }
+
+    private void ShowFlyoutInteractive(MenuFlyout flyout, FrameworkElement target)
+    {
+        BeginInteractive();
+        flyout.Closed += (_, _) => EndInteractive();
+        flyout.ShowAt(target);
+    }
+
+    private void ShowFlyoutInteractive(MenuFlyout flyout, FrameworkElement target, Point position)
+    {
+        BeginInteractive();
+        flyout.Closed += (_, _) => EndInteractive();
+        flyout.ShowAt(target, position);
     }
 
     private MenuFlyoutSubItem BuildOpacityMenu()
@@ -1681,7 +1770,17 @@ public sealed partial class BoxWindow : Window
 
     private async void OpenAppearanceAsync()
     {
-        var result = await Dialogs.AppearanceAsync(Root, _box.Appearance, AppSettingsService.Current);
+        BoxAppearance? result;
+        BeginInteractive();
+        try
+        {
+            result = await Dialogs.AppearanceAsync(Root, _box.Appearance, AppSettingsService.Current);
+        }
+        finally
+        {
+            EndInteractive();
+        }
+
         if (result is null)
         {
             return;
@@ -1704,20 +1803,30 @@ public sealed partial class BoxWindow : Window
         }
 
         var item = selected[0];
-        var name = await Dialogs.PromptAsync(
-            Root,
-            "重命名",
-            item.DisplayName,
-            "新名称",
-            validate: text =>
-            {
-                if (text.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        string? name;
+        BeginInteractive();
+        try
+        {
+            name = await Dialogs.PromptAsync(
+                Root,
+                "重命名",
+                item.DisplayName,
+                "新名称",
+                validate: text =>
                 {
-                    return "名称包含不允许的字符。";
-                }
+                    if (text.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                    {
+                        return "名称包含不允许的字符。";
+                    }
 
-                return text.Length > 120 ? "名称过长。" : null;
-            });
+                    return text.Length > 120 ? "名称过长。" : null;
+                });
+        }
+        finally
+        {
+            EndInteractive();
+        }
+
         if (name is null)
         {
             return;
@@ -1962,7 +2071,7 @@ public sealed partial class BoxWindow : Window
         AddMenuItem(flyout, "收纳文件夹…", "\uE8B7", AddFolderAsync);
         AddMenuItem(flyout, "粘贴", "\uE77F", PasteAsync);
         AddMenuItem(flyout, "粘贴路径收纳…", "\uE71B", PastePathAsync);
-        flyout.ShowAt(AddButton);
+        ShowFlyoutInteractive(flyout, AddButton);
     }
 
     private async void AddFilesAsync()
@@ -2064,7 +2173,17 @@ public sealed partial class BoxWindow : Window
             return;
         }
 
-        var name = await Dialogs.PromptAsync(Root, "新建文件夹", "新建文件夹", "文件夹名称");
+        string? name;
+        BeginInteractive();
+        try
+        {
+            name = await Dialogs.PromptAsync(Root, "新建文件夹", "新建文件夹", "文件夹名称");
+        }
+        finally
+        {
+            EndInteractive();
+        }
+
         if (name is null)
         {
             return;
