@@ -128,8 +128,7 @@ public sealed partial class BoxWindow : Window
             NativeMethods.SetWindowLongPtrSafe(
                 hwnd,
                 NativeMethods.GWL_EXSTYLE,
-                (IntPtr)(exStyle | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE));
-            NativeMethods.SetWindowSubclass(hwnd, _subclassProc, 1, IntPtr.Zero);
+                (IntPtr)(exStyle | NativeMethods.WS_EX_TOOLWINDOW));
             LogService.Info(
                 $"收纳盒窗口初始化：{AppWindow.Size.Width}x{AppWindow.Size.Height}px，" +
                 $"DPI {DpiUtil.WindowDpi(hwnd)}，shownInSwitchers={AppWindow.IsShownInSwitchers}");
@@ -215,67 +214,13 @@ public sealed partial class BoxWindow : Window
 
     private IntPtr _previousForeground = IntPtr.Zero;
 
-    /// <summary>进入输入/菜单交互：临时解除 WS_EX_NOACTIVATE，允许键盘输入。</summary>
+    /// <summary>普通窗口激活模式下无需切换焦点样式。</summary>
     public void BeginInteractive()
     {
-        if (_closed)
-        {
-            return;
-        }
-
-        if (_interactiveDepth == 0)
-        {
-            _previousForeground = NativeMethods.GetForegroundWindow();
-        }
-
-        _interactiveDepth++;
-        try
-        {
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-            var ex = NativeMethods.GetWindowLongPtrSafe(hwnd, NativeMethods.GWL_EXSTYLE).ToInt64();
-            NativeMethods.SetWindowLongPtrSafe(hwnd, NativeMethods.GWL_EXSTYLE, (IntPtr)(ex & ~NativeMethods.WS_EX_NOACTIVATE));
-            NativeMethods.SetForegroundWindow(hwnd);
-            Activate();
-        }
-        catch (Exception ex)
-        {
-            LogService.Warn($"临时激活收纳盒失败：{ex.GetType().Name}");
-        }
     }
 
-    /// <summary>输入/菜单结束：恢复 WS_EX_NOACTIVATE 并让出焦点。</summary>
     public void EndInteractive()
     {
-        if (_closed || _interactiveDepth == 0)
-        {
-            return;
-        }
-
-        _interactiveDepth--;
-        if (_interactiveDepth > 0)
-        {
-            return;
-        }
-
-        try
-        {
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-            var ex = NativeMethods.GetWindowLongPtrSafe(hwnd, NativeMethods.GWL_EXSTYLE).ToInt64();
-            NativeMethods.SetWindowLongPtrSafe(hwnd, NativeMethods.GWL_EXSTYLE, (IntPtr)(ex | NativeMethods.WS_EX_NOACTIVATE));
-            if (_previousForeground != IntPtr.Zero && _previousForeground != hwnd)
-            {
-                NativeMethods.SetForegroundWindow(_previousForeground);
-            }
-
-            if (!_box.IsPinned)
-            {
-                SendToBack();
-            }
-        }
-        catch (Exception ex)
-        {
-            LogService.Warn($"恢复收纳盒焦点状态失败：{ex.GetType().Name}");
-        }
     }
 
     private IntPtr BoxSubclassProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr id, IntPtr data)
@@ -426,7 +371,26 @@ public sealed partial class BoxWindow : Window
         else
         {
             RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            // 用很轻的深色遮罩保证文字可读，同时让 Mica/Acrylic 的壁纸模糊透出来。
+            BackgroundLayer.Background = new SolidColorBrush(Microsoft.UI.Colors.Black) { Opacity = 0.22 };
             BackgroundLayer.Visibility = Visibility.Visible;
+        }
+
+        // 同时设置 DWM 系统背景类型，避免 WinUI SystemBackdrop 在某些 Win11 组合下不生效。
+        try
+        {
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            var type = SystemBackdrop switch
+            {
+                MicaBackdrop => 2,       // DWMSBT_MAINWINDOW
+                DesktopAcrylicBackdrop => 3, // DWMSBT_TRANSIENTWINDOW
+                _ => 1,                  // DWMSBT_NONE
+            };
+            NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_SYSTEMBACKDROP_TYPE, ref type, sizeof(int));
+        }
+        catch
+        {
+            // 旧系统不支持时忽略。
         }
     }
 
@@ -1184,7 +1148,7 @@ public sealed partial class BoxWindow : Window
 
                 if (payload.BoxId == _box.Id)
                 {
-                    ReorderWithinBox(payload.ItemIds, e.GetPosition(ItemsView));
+                    // 同盒拖动交给 ListView 的 CanReorderItems 处理，由 DragItemsCompleted 持久化。
                     return;
                 }
 
@@ -1287,6 +1251,18 @@ public sealed partial class BoxWindow : Window
         {
             ShowInfo("已收纳", $"已收纳 {success} 项。", InfoBarSeverity.Success, autoCloseMs: 3500);
         }
+    }
+
+    private void OnItemsDragCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
+    {
+        if (_closed)
+        {
+            return;
+        }
+
+        BoxService.SetSort(_box, "custom", false);
+        ItemRepository.UpdateSortIndices(_items.ToList());
+        ShowInfo("顺序已更新", "已切换为自定义排序，拖拽位置已保存。", InfoBarSeverity.Success, autoCloseMs: 2000);
     }
 
     private void OnDragItemsStarting(object sender, DragItemsStartingEventArgs e)

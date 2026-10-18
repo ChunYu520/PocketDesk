@@ -9,7 +9,7 @@
     mc:Ignorable="d"
     Title="PocketDesk">
 
-    <Grid x:Name="RootGrid" Background="Transparent" AllowFocusOnInteraction="False">
+    <Grid x:Name="RootGrid" Background="Transparent">
         <Grid.Resources>
         <ItemsPanelTemplate x:Key="GridPanelTemplate">
             <ItemsWrapGrid Orientation="Horizontal" />
@@ -176,12 +176,12 @@
         <Grid x:Name="ContentRoot" Grid.Row="1">
             <ListView x:Name="ItemsView"
                       Background="Transparent"
-                      AllowFocusOnInteraction="False"
                       Padding="8,2,8,8"
                       SelectionMode="Extended"
                       AllowDrop="True"
                       CanDragItems="True"
-                      CanReorderItems="False"
+                      CanReorderItems="True"
+                      DragItemsCompleted="OnItemsDragCompleted"
                       IsItemClickEnabled="False"
                       HorizontalAlignment="Stretch"
                       AutomationProperties.Name="收纳盒内容"

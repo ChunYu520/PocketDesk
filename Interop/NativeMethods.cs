@@ -636,6 +636,7 @@ internal static class NativeMethods
     internal const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
     internal const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     internal const int DWMWA_BORDER_COLOR = 34;
+    internal const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
     internal const int DWMWCP_ROUND = 2;
     internal const int DWMWA_COLOR_NONE = unchecked((int)0xFFFFFFFE);
 
