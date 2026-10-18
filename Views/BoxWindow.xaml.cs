@@ -5,6 +5,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.Graphics;
@@ -221,16 +222,8 @@ public sealed partial class BoxWindow : Window
         {
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             // 不能直接用 HWND_BOTTOM：会落到 Progman/桌面图标下面，DWM 会按桌面背景渲染，
-            // 圆角、模糊和阴影都会消失。插到“桌面之上、普通窗口之下”的桌面层。
-            var desktop = NativeMethods.FindDesktopWindow();
-            var insertAfter = desktop != IntPtr.Zero
-                ? NativeMethods.GetWindow(desktop, NativeMethods.GW_HWNDPREV)
-                : IntPtr.Zero;
-            if (insertAfter == IntPtr.Zero)
-            {
-                insertAfter = NativeMethods.HWND_BOTTOM;
-            }
-
+            // 圆角、模糊和阴影都会消失。插到“最上层桌面宿主之上、普通窗口之下”的桌面层。
+            var insertAfter = NativeMethods.FindDesktopInsertAfter();
             NativeMethods.SetWindowPos(
                 hwnd,
                 insertAfter,
@@ -323,42 +316,63 @@ public sealed partial class BoxWindow : Window
         var material = ResolveMaterial();
         try
         {
-            if (AccessibilityService.IsHighContrast)
+            if (!AccessibilityService.IsHighContrast && material != MaterialKind.Solid && TryApplyWallpaper())
             {
-                // 高对比度下必须保证可读性：禁用 Mica/Acrylic。
-                SystemBackdrop = null;
+                return;
             }
-            else if (material == MaterialKind.Mica && MicaController.IsSupported())
-            {
-                // Mica 在窗口失焦时会被系统压成纯色；Acrylic 失焦仍保留壁纸模糊，
-                // 这样桌面停靠时也能保持“活动”观感。
-                SystemBackdrop = new DesktopAcrylicBackdrop();
-            }
-            else if (material != MaterialKind.Solid && DesktopAcrylicController.IsSupported())
-            {
-                SystemBackdrop = new DesktopAcrylicBackdrop();
-            }
-            else
-            {
-                SystemBackdrop = null;
-            }
+
+            // 高对比度/纯色，或取不到壁纸时使用纯色底。
+            ApplySolidScene();
         }
         catch (Exception ex)
         {
             LogService.Warn($"设置窗口材质失败：{ex.GetType().Name}");
-            SystemBackdrop = null;
+            ApplySolidScene();
+        }
+    }
+
+    /// <summary>
+    /// 直接绘制当前系统壁纸，并叠加半透明色调。它不依赖窗口焦点，
+    /// 所有收纳盒无论是否处于焦点都是同一套活动外观。
+    /// </summary>
+    private bool TryApplyWallpaper()
+    {
+        var path = NativeMethods.GetWallpaperPath();
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return false;
         }
 
-        if (SystemBackdrop is null)
+        try
         {
-            RootGrid.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
-            BackgroundLayer.Visibility = Visibility.Collapsed;
-        }
-        else
-        {
-            RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            var image = new BitmapImage();
+            image.UriSource = new Uri(path, UriKind.Absolute);
+            BackgroundLayer.Background = new ImageBrush
+            {
+                ImageSource = image,
+                Stretch = Stretch.UniformToFill,
+                AlignmentX = AlignmentX.Center,
+                AlignmentY = AlignmentY.Center,
+            };
             BackgroundLayer.Visibility = Visibility.Visible;
+            TintLayer.Visibility = Visibility.Visible;
+            RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            SystemBackdrop = null;
+            return true;
         }
+        catch (Exception ex)
+        {
+            LogService.Warn($"壁纸背景失败：{ex.GetType().Name}");
+            return false;
+        }
+    }
+
+    private void ApplySolidScene()
+    {
+        SystemBackdrop = null;
+        RootGrid.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
+        BackgroundLayer.Visibility = Visibility.Collapsed;
+        TintLayer.Visibility = Visibility.Collapsed;
     }
 
     private MaterialKind ResolveMaterial()

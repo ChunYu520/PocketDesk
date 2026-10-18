@@ -79,6 +79,20 @@ internal static class NativeMethods
     [DllImport("user32.dll", EntryPoint = "FindWindowW", CharSet = CharSet.Unicode, SetLastError = true)]
     internal static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
 
+    internal const uint SPI_GETDESKWALLPAPER = 0x0073;
+
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SystemParametersInfo(uint action, uint param, System.Text.StringBuilder value, uint winIni);
+
+    internal static string? GetWallpaperPath()
+    {
+        var buffer = new System.Text.StringBuilder(1024);
+        return SystemParametersInfo(SPI_GETDESKWALLPAPER, (uint)buffer.Capacity, buffer, 0)
+            ? buffer.ToString()
+            : null;
+    }
+
     internal delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     [DllImport("user32.dll")]
@@ -91,6 +105,31 @@ internal static class NativeMethods
     internal static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
 
     internal const uint GW_HWNDPREV = 3;
+
+    /// <summary>
+    /// 返回桌面层最上层窗口的“上方窗口”，用于把收纳盒插到所有 Progman/WorkerW 之上、
+    /// 普通应用之下。返回 IntPtr.Zero 时表示应使用 HWND_TOP。
+    /// </summary>
+    internal static IntPtr FindDesktopInsertAfter()
+    {
+        var previous = IntPtr.Zero;
+        var result = IntPtr.Zero;
+        EnumWindows((hWnd, _) =>
+        {
+            var name = new System.Text.StringBuilder(64);
+            GetClassName(hWnd, name, name.Capacity);
+            var cls = name.ToString();
+            if (cls is "Progman" or "WorkerW")
+            {
+                result = previous;
+                return false;
+            }
+
+            previous = hWnd;
+            return true;
+        }, IntPtr.Zero);
+        return result;
+    }
 
     /// <summary>查找桌面宿主 Progman；FindWindow 在部分 Win11 组合下不可靠，改为枚举。</summary>
     internal static IntPtr FindDesktopWindow()
