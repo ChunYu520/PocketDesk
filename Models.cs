@@ -51,6 +51,7 @@ public enum MaterialKind
     Mica,
     Acrylic,
     Solid,
+    Transparent,
 }
 
 /// <summary>主题覆盖。</summary>

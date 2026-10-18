@@ -362,6 +362,10 @@ public sealed partial class BoxWindow : Window
             {
                 SystemBackdrop = null;
             }
+            else if (material == MaterialKind.Transparent)
+            {
+                SystemBackdrop = new TransparentBackdrop();
+            }
             else if (material == MaterialKind.Mica && MicaController.IsSupported())
             {
                 SystemBackdrop = new MicaBackdrop();
@@ -381,10 +385,17 @@ public sealed partial class BoxWindow : Window
             SystemBackdrop = null;
         }
 
-        if (SystemBackdrop is null)
+        if (material == MaterialKind.Transparent && SystemBackdrop is TransparentBackdrop)
+        {
+            RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            BackgroundLayer.Visibility = Visibility.Collapsed;
+            ApplyFrameExtension(-1);
+        }
+        else if (SystemBackdrop is null)
         {
             RootGrid.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
             BackgroundLayer.Visibility = Visibility.Collapsed;
+            ApplyFrameExtension(1);
         }
         else
         {
@@ -396,9 +407,30 @@ public sealed partial class BoxWindow : Window
                 Opacity = 0.35,
             };
             BackgroundLayer.Visibility = Visibility.Visible;
+            ApplyFrameExtension(1);
         }
 
         ApplyWindowBorderColor();
+    }
+
+    private void ApplyFrameExtension(int margin)
+    {
+        try
+        {
+            var margins = new NativeMethods.MARGINS
+            {
+                Left = margin,
+                Right = margin,
+                Top = margin,
+                Bottom = margin,
+            };
+            NativeMethods.DwmExtendFrameIntoClientArea(
+                WinRT.Interop.WindowNative.GetWindowHandle(this), ref margins);
+        }
+        catch
+        {
+            // 旧系统忽略。
+        }
     }
 
     private MaterialKind ResolveMaterial()
@@ -503,7 +535,21 @@ public sealed partial class BoxWindow : Window
         var appearance = _box.Appearance;
         var radius = new CornerRadius(Math.Clamp(appearance.CornerRadius, 0, 24));
         BackgroundLayer.CornerRadius = radius;
+        BorderLayer.CornerRadius = radius;
         BackgroundLayer.Opacity = Math.Clamp(appearance.BackgroundOpacity, 0.1, 1.0);
+        var transparent = ResolveMaterial() == MaterialKind.Transparent;
+        BorderLayer.Visibility = transparent ? Visibility.Visible : Visibility.Collapsed;
+        if (transparent)
+        {
+            var light = RootGrid.RequestedTheme == ElementTheme.Light ||
+                        (RootGrid.RequestedTheme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Light);
+            BorderLayer.BorderThickness = new Thickness(1);
+            BorderLayer.BorderBrush = new SolidColorBrush(light ? Microsoft.UI.Colors.Black : Microsoft.UI.Colors.White)
+            {
+                Opacity = 0.35,
+            };
+        }
+
         ApplyWindowBorderColor();
         ApplyLayout();
         ApplyItemAppearance(reloadIcons: true);

@@ -183,12 +183,13 @@ public static class Dialogs
         var material = new ComboBox
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            ItemsSource = new[] { "跟随全局", "Mica", "亚克力", "纯色" },
+            ItemsSource = new[] { "跟随全局", "Mica", "亚克力", "纯色", "全透" },
             SelectedIndex = appearance.Material switch
             {
                 "Mica" => 1,
                 "Acrylic" => 2,
                 "Solid" => 3,
+                "Transparent" => 4,
                 _ => 0,
             },
         };
@@ -283,6 +284,7 @@ public static class Dialogs
                 1 => "Mica",
                 2 => "Acrylic",
                 3 => "Solid",
+                4 => "Transparent",
                 _ => null,
             };
             appearance.Theme = theme.SelectedIndex switch

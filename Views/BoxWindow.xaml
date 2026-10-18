@@ -118,6 +118,12 @@
                 Margin="-1"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 IsHitTestVisible="False" />
+        <Border x:Name="BorderLayer"
+                Grid.RowSpan="3"
+                BorderThickness="1"
+                CornerRadius="12"
+                Visibility="Collapsed"
+                IsHitTestVisible="False" />
 
         <!-- 自绘标题栏 -->
         <Grid x:Name="TitleBarHost" Grid.Row="0" Height="44" Padding="10,0,6,0">

@@ -104,6 +104,7 @@ public sealed partial class SettingsWindow : Window
         {
             MaterialKind.Acrylic => 1,
             MaterialKind.Solid => 2,
+            MaterialKind.Transparent => 3,
             _ => 0,
         };
         ThemeCombo.SelectedIndex = s.ThemeKind switch
@@ -221,6 +222,7 @@ public sealed partial class SettingsWindow : Window
         {
             1 => "Acrylic",
             2 => "Solid",
+            3 => "Transparent",
             _ => "Mica",
         };
         Save();

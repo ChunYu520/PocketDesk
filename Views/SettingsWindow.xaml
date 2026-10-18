@@ -105,6 +105,7 @@
                                         <ComboBoxItem Content="Mica（云母，与壁纸融合）" />
                                         <ComboBoxItem Content="DesktopAcrylic（亚克力，更通透）" />
                                         <ComboBoxItem Content="纯色（最高可读性）" />
+                                        <ComboBoxItem Content="全透（透明背景 + 半透明边框）" />
                                     </ComboBox>
                                     <ComboBox x:Name="ThemeCombo"
                                               Header="主题"
