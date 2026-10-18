@@ -94,6 +94,8 @@ public sealed class BoxAppearance
     public double CornerRadius { get; set; } = 12;
     public double BackgroundOpacity { get; set; } = 0.88;
     public double BorderOpacity { get; set; } = 0.30;
+    public double BorderThickness { get; set; } = 1;
+    public string BorderColor { get; set; } = "#000000";
     public double IconSize { get; set; } = 48;
     public int Columns { get; set; } // 0 = 自适应
     public int NameLines { get; set; } = 2;

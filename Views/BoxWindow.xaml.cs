@@ -387,7 +387,7 @@ public sealed partial class BoxWindow : Window
         {
             RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
             // 轻遮罩让 Mica/Acrylic 透出来，同时 BackgroundOpacity 滑条有可调对象。
-            BackgroundLayer.Background = new SolidColorBrush(Microsoft.UI.Colors.Black) { Opacity = 0.26 };
+            BackgroundLayer.Background = new SolidColorBrush(Microsoft.UI.Colors.Black) { Opacity = 0.55 };
             BackgroundLayer.Visibility = Visibility.Visible;
         }
 
@@ -436,20 +436,47 @@ public sealed partial class BoxWindow : Window
         ApplyAppearance();
     }
 
+    private static Windows.UI.Color ParseColor(string? value, Windows.UI.Color fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return fallback;
+        }
+
+        var text = value.Trim().TrimStart('#');
+        try
+        {
+            return text.Length switch
+            {
+                8 => Windows.UI.Color.FromArgb(
+                    Convert.ToByte(text[..2], 16),
+                    Convert.ToByte(text.Substring(2, 2), 16),
+                    Convert.ToByte(text.Substring(4, 2), 16),
+                    Convert.ToByte(text.Substring(6, 2), 16)),
+                6 => Windows.UI.Color.FromArgb(
+                    255,
+                    Convert.ToByte(text[..2], 16),
+                    Convert.ToByte(text.Substring(2, 2), 16),
+                    Convert.ToByte(text.Substring(4, 2), 16)),
+                _ => fallback,
+            };
+        }
+        catch
+        {
+            return fallback;
+        }
+    }
+
     private void ApplyAppearance()
     {
         var appearance = _box.Appearance;
         var radius = new CornerRadius(Math.Clamp(appearance.CornerRadius, 0, 24));
         BackgroundLayer.CornerRadius = radius;
         BorderLayer.CornerRadius = radius;
-        BackgroundLayer.Opacity = appearance.BackgroundOpacity;
-        BorderLayer.Opacity = 1;
-        BorderLayer.BorderThickness = appearance.BorderOpacity > 0.01 ? new Thickness(1) : new Thickness(0);
-        BorderLayer.BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.Black)
-        {
-            Opacity = Math.Clamp(appearance.BorderOpacity, 0, 1),
-        };
-
+        BackgroundLayer.Opacity = Math.Clamp(appearance.BackgroundOpacity, 0.1, 1.0);
+        BorderLayer.Opacity = Math.Clamp(appearance.BorderOpacity, 0, 1);
+        BorderLayer.BorderThickness = new Thickness(Math.Clamp(appearance.BorderThickness, 0, 4));
+        BorderLayer.BorderBrush = new SolidColorBrush(ParseColor(appearance.BorderColor, Microsoft.UI.Colors.Black));
         ApplyLayout();
         ApplyItemAppearance(reloadIcons: true);
         UpdateStatus();
@@ -890,7 +917,7 @@ public sealed partial class BoxWindow : Window
         }
     }
 
-    private async void OnTitleDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    private async void OnTitleTapped(object sender, TappedRoutedEventArgs e)
     {
         e.Handled = true;
         var name = await Dialogs.PromptAsync(

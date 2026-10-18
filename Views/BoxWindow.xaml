@@ -115,7 +115,6 @@
         <!-- 背景层：半透明材质底色 -->
         <Border x:Name="BackgroundLayer"
                 Grid.RowSpan="3"
-                Margin="-1"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 IsHitTestVisible="False" />
         <Border x:Name="BorderLayer"
@@ -132,7 +131,7 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Grid x:Name="DragArea" Background="Transparent" DoubleTapped="OnTitleDoubleTapped">
+            <Grid x:Name="DragArea" Background="Transparent">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -145,6 +144,7 @@
                            FontSize="13"
                            FontWeight="SemiBold"
                            TextTrimming="CharacterEllipsis"
+                           Tapped="OnTitleTapped"
                            TextWrapping="NoWrap" />
             </Grid>
 
