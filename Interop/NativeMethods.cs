@@ -50,6 +50,7 @@ internal static class NativeMethods
     internal static extern short GetKeyState(int nVirtKey);
 
     internal const int VK_SHIFT = 0x10;
+    internal const int VK_CONTROL = 0x11;
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -77,6 +78,20 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
     internal static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
+    internal static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
+    internal static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    internal static IntPtr GetWindowLongPtrSafe(IntPtr hWnd, int nIndex) =>
+        IntPtr.Size == 8 ? GetWindowLongPtr(hWnd, nIndex) : new IntPtr(GetWindowLong32(hWnd, nIndex));
+
+    internal static IntPtr SetWindowLongPtrSafe(IntPtr hWnd, int nIndex, IntPtr dwNewLong) =>
+        IntPtr.Size == 8
+            ? SetWindowLongPtr(hWnd, nIndex, dwNewLong)
+            : new IntPtr(SetWindowLong32(hWnd, nIndex, dwNewLong.ToInt32()));
 
     [DllImport("user32.dll", SetLastError = true)]
     internal static extern IntPtr GetDC(IntPtr hwnd);

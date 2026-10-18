@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="PocketDesk"
+           Manufacturer="PocketDesk"
+           Version="1.0.0"
+           UpgradeCode="C0C27D7D-6E42-4E5A-A621-0B1F0F7F7E11"
+           Scope="perUser"
+           Compressed="yes"
+           Language="1033">
+
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="已安装更新版本的 PocketDesk。" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Property Id="ALLUSERS" Value="2" />
+    <Property Id="MSIINSTALLPERUSER" Value="1" />
+
+    <Icon Id="AppIcon" SourceFile="$(var.PublishDir)\Assets\AppIcon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+    <Property Id="ARPCOMMENTS" Value="桌面原生收纳层" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsDir" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="PocketDesk" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppMenuDir" Name="PocketDesk" />
+    </StandardDirectory>
+
+    <ComponentGroup Id="AppFiles">
+      <Files Include="$(var.PublishDir)\**" Directory="INSTALLFOLDER" />
+    </ComponentGroup>
+
+    <Component Id="StartMenuShortcut" Directory="AppMenuDir" Guid="8A3A65D2-1E3D-4F7B-8C63-6A4F6E0E4B31">
+      <Shortcut Id="PocketDeskStartMenuShortcut"
+                Name="PocketDesk"
+                Description="桌面原生收纳层"
+                Target="[INSTALLFOLDER]PocketDesk.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RemoveFolder Id="RemoveAppMenuDir" Directory="AppMenuDir" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\PocketDesk" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Feature Id="MainFeature" Title="PocketDesk" Level="1" Display="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <CustomAction Id="KillBeforeInstall"
+                  Directory="SystemFolder"
+                  ExeCommand="taskkill.exe /IM PocketDesk.exe /F /T"
+                  Execute="deferred"
+                  Impersonate="yes"
+                  Return="ignore" />
+
+    <CustomAction Id="KillBeforeUninstall"
+                  Directory="SystemFolder"
+                  ExeCommand="taskkill.exe /IM PocketDesk.exe /F /T"
+                  Execute="deferred"
+                  Impersonate="yes"
+                  Return="ignore" />
+
+    <CustomAction Id="UninstallCleanup"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="&quot;[INSTALLFOLDER]PocketDesk.exe&quot; --uninstall=keep"
+                  Execute="deferred"
+                  Impersonate="yes"
+                  Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="KillBeforeInstall" Before="InstallFiles" Condition="NOT REMOVE" />
+      <Custom Action="KillBeforeUninstall" Before="UninstallCleanup" Condition='REMOVE~="ALL"' />
+      <Custom Action="UninstallCleanup" Before="RemoveFiles" Condition='REMOVE~="ALL"' />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>

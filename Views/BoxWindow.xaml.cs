@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
@@ -18,7 +19,7 @@ public sealed partial class BoxWindow : Window
     private const string InternalDragFormat = "PocketDesk.BoxItems";
 
     private readonly Box _box;
-    private readonly List<BoxItem> _items = new();
+    private readonly ObservableCollection<BoxItem> _items = new();
     private readonly BoxImportInteraction _interaction;
     private readonly DispatcherQueueTimer _placementTimer;
     private readonly DispatcherQueueTimer _infoTimer;
@@ -118,8 +119,8 @@ public sealed partial class BoxWindow : Window
 
             // 收纳盒是桌面层组件：不进入任务栏 / Alt+Tab，避免挤占任务栏。
             AppWindow.IsShownInSwitchers = false;
-            var exStyle = NativeMethods.GetWindowLongPtr(hwnd, NativeMethods.GWL_EXSTYLE).ToInt64();
-            NativeMethods.SetWindowLongPtr(
+            var exStyle = NativeMethods.GetWindowLongPtrSafe(hwnd, NativeMethods.GWL_EXSTYLE).ToInt64();
+            NativeMethods.SetWindowLongPtrSafe(
                 hwnd,
                 NativeMethods.GWL_EXSTYLE,
                 (IntPtr)(exStyle | NativeMethods.WS_EX_TOOLWINDOW));
@@ -568,7 +569,10 @@ public sealed partial class BoxWindow : Window
         var selected = ItemsView.SelectedItems.OfType<BoxItem>().Select(i => i.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var fresh = BoxService.GetItems(_box);
         _items.Clear();
-        _items.AddRange(fresh);
+        foreach (var item in fresh)
+        {
+            _items.Add(item);
+        }
 
         ApplyItemAppearance(reloadIcons: true);
         RestoreSelection(selected);
@@ -2002,6 +2006,10 @@ public sealed partial class BoxWindow : Window
                 break;
             case Windows.System.VirtualKey.Escape:
                 ItemsView.SelectedItems.Clear();
+                e.Handled = true;
+                break;
+            case Windows.System.VirtualKey.V when (NativeMethods.GetKeyState(NativeMethods.VK_CONTROL) & 0x8000) != 0:
+                PasteAsync();
                 e.Handled = true;
                 break;
         }

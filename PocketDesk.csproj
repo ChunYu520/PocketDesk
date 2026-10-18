@@ -83,6 +83,28 @@
     <PublishSingleFile>false</PublishSingleFile>
   </PropertyGroup>
 
+  <!--
+    WinUI 3 的 XAML 资源（.xbf / PocketDesk.pri）和 Assets 在 build 输出中，
+    但 WindowsPackageType=None 时 dotnet publish 不会自动复制它们。缺少这些文件会导致
+    安装后所有窗口报 "XAML parsing failed"。这里在 Publish 之后显式补齐。
+  -->
+  <Target Name="CopyWinUIResourcesToPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <_WinUIPublishPri Include="$(TargetDir)PocketDesk.pri" Condition="Exists('$(TargetDir)PocketDesk.pri')" />
+      <_WinUIPublishXbf Include="$(TargetDir)**\*.xbf" />
+      <_WinUIPublishAssets Include="$(TargetDir)Assets\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_WinUIPublishPri)"
+          DestinationFolder="$(PublishDir)"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_WinUIPublishXbf)"
+          DestinationFiles="@(_WinUIPublishXbf->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_WinUIPublishAssets)"
+          DestinationFiles="@(_WinUIPublishAssets->'$(PublishDir)Assets\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
   <!-- Publish Properties -->
   <PropertyGroup>
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
