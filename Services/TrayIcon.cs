@@ -11,11 +11,15 @@ public sealed class TrayIcon : IDisposable
 
     private readonly NativeMethods.WndProc _wndProc;
     private readonly DispatcherQueue? _dispatcher;
+    private readonly uint _taskbarCreatedMessage;
     private readonly string _className = "PocketDesk.Tray." + Guid.NewGuid().ToString("N");
     private IntPtr _hwnd;
     private IntPtr _hIcon;
     private bool _disposed;
     private bool _iconAdded;
+    private bool _classRegistered;
+    private string _tooltip;
+    private DispatcherQueueTimer? _watchdog;
 
     public event Action? ShowAllRequested;
     public event Action? HideAllRequested;
@@ -27,26 +31,45 @@ public sealed class TrayIcon : IDisposable
     public TrayIcon(string tooltip = "PocketDesk")
     {
         _dispatcher = DispatcherQueue.GetForCurrentThread();
+        _tooltip = tooltip;
+        _taskbarCreatedMessage = NativeMethods.RegisterWindowMessage("TaskbarCreated");
         _wndProc = WindowProc;
         CreateHostWindow();
         CreateIcon();
         AddIcon(tooltip);
+
+        // Explorer 重启或托盘宿主窗口被销毁后，Shell 会忘记图标。
+        // 定时自愈，保证长时间运行/重新登录后托盘仍在。
+        if (_dispatcher is not null)
+        {
+            _watchdog = _dispatcher.CreateTimer();
+            _watchdog.Interval = TimeSpan.FromSeconds(2);
+            _watchdog.Tick += (_, _) => EnsureIcon();
+            _watchdog.Start();
+        }
     }
 
     private void CreateHostWindow()
     {
         var module = NativeMethods.GetModuleHandle(null);
-        var wc = new NativeMethods.WNDCLASSEX
+        if (!_classRegistered)
         {
-            cbSize = (uint)Marshal.SizeOf<NativeMethods.WNDCLASSEX>(),
-            lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
-            hInstance = module,
-            lpszClassName = _className,
-        };
-        var atom = NativeMethods.RegisterClassEx(ref wc);
-        if (atom == 0)
-        {
-            LogService.Warn("托盘窗口类注册失败。");
+            var wc = new NativeMethods.WNDCLASSEX
+            {
+                cbSize = (uint)Marshal.SizeOf<NativeMethods.WNDCLASSEX>(),
+                lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
+                hInstance = module,
+                lpszClassName = _className,
+            };
+            var atom = NativeMethods.RegisterClassEx(ref wc);
+            if (atom == 0)
+            {
+                LogService.Warn("托盘窗口类注册失败。");
+            }
+            else
+            {
+                _classRegistered = true;
+            }
         }
 
         _hwnd = NativeMethods.CreateWindowEx(
@@ -130,8 +153,29 @@ public sealed class TrayIcon : IDisposable
         };
     }
 
+    private void EnsureIcon()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (_hwnd == IntPtr.Zero || !NativeMethods.IsWindow(_hwnd))
+        {
+            _hwnd = IntPtr.Zero;
+            _iconAdded = false;
+            CreateHostWindow();
+        }
+
+        if (_hwnd != IntPtr.Zero && !_iconAdded)
+        {
+            AddIcon(_tooltip);
+        }
+    }
+
     public void SetTooltip(string tooltip)
     {
+        _tooltip = tooltip;
         if (_hwnd == IntPtr.Zero || !_iconAdded)
         {
             return;
@@ -144,6 +188,14 @@ public sealed class TrayIcon : IDisposable
 
     private IntPtr WindowProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
+        // Explorer 重启后必须重新添加托盘图标，否则图标会永久消失。
+        if (_taskbarCreatedMessage != 0 && msg == _taskbarCreatedMessage)
+        {
+            _iconAdded = false;
+            EnsureIcon();
+            return IntPtr.Zero;
+        }
+
         // 部分外壳（Win11 XAML 溢出面板）会直接把 WM_CONTEXTMENU 发给宿主窗口，
         // 而不是通过回调消息转发。
         if (msg == NativeMethods.WM_CONTEXTMENU)
@@ -281,6 +333,8 @@ public sealed class TrayIcon : IDisposable
         _disposed = true;
         try
         {
+            _watchdog?.Stop();
+            _watchdog = null;
             if (_iconAdded && _hwnd != IntPtr.Zero)
             {
                 var data = BuildData("PocketDesk");

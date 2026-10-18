@@ -76,6 +76,48 @@ internal static class NativeMethods
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
     internal static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
 
+    [DllImport("user32.dll", EntryPoint = "FindWindowW", CharSet = CharSet.Unicode, SetLastError = true)]
+    internal static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
+
+    internal delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    internal static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll", EntryPoint = "GetClassNameW", CharSet = CharSet.Unicode)]
+    internal static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+
+    [DllImport("user32.dll")]
+    internal static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+    internal const uint GW_HWNDPREV = 3;
+
+    /// <summary>查找桌面宿主 Progman；FindWindow 在部分 Win11 组合下不可靠，改为枚举。</summary>
+    internal static IntPtr FindDesktopWindow()
+    {
+        var found = IntPtr.Zero;
+        EnumWindows((hWnd, _) =>
+        {
+            var name = new System.Text.StringBuilder(64);
+            GetClassName(hWnd, name, name.Capacity);
+            if (name.ToString() == "Progman")
+            {
+                found = hWnd;
+                return false;
+            }
+
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool IsWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", EntryPoint = "RegisterWindowMessageW", CharSet = CharSet.Unicode)]
+    internal static extern uint RegisterWindowMessage(string lpString);
+
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
     internal static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
 

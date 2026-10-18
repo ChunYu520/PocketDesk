@@ -175,6 +175,40 @@ public sealed partial class BoxWindow : Window
         }
     }
 
+    /// <summary>
+    /// 桌面获得焦点（例如按 Win+D）时临时置顶，避免被桌面盖住；
+    /// 回到普通窗口时立即恢复桌面层，不长期置顶。
+    /// </summary>
+    public void SetDesktopMode(bool desktop)
+    {
+        if (_closed)
+        {
+            return;
+        }
+
+        try
+        {
+            if (desktop)
+            {
+                if (AppWindow.Presenter is OverlappedPresenter presenter)
+                {
+                    presenter.IsAlwaysOnTop = true;
+                }
+
+                ApplyBackdrop();
+            }
+            else
+            {
+                ApplyPresenterState();
+                SendToBack();
+            }
+        }
+        catch (Exception ex)
+        {
+            LogService.Warn($"切换桌面模式失败：{ex.GetType().Name}");
+        }
+    }
+
     /// <summary>把窗口压到 z 序最底层，形成“贴着壁纸”的桌面层效果。</summary>
     public void SendToBack()
     {
@@ -186,9 +220,20 @@ public sealed partial class BoxWindow : Window
         try
         {
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            // 不能直接用 HWND_BOTTOM：会落到 Progman/桌面图标下面，DWM 会按桌面背景渲染，
+            // 圆角、模糊和阴影都会消失。插到“桌面之上、普通窗口之下”的桌面层。
+            var desktop = NativeMethods.FindDesktopWindow();
+            var insertAfter = desktop != IntPtr.Zero
+                ? NativeMethods.GetWindow(desktop, NativeMethods.GW_HWNDPREV)
+                : IntPtr.Zero;
+            if (insertAfter == IntPtr.Zero)
+            {
+                insertAfter = NativeMethods.HWND_BOTTOM;
+            }
+
             NativeMethods.SetWindowPos(
                 hwnd,
-                NativeMethods.HWND_BOTTOM,
+                insertAfter,
                 0,
                 0,
                 0,
@@ -285,7 +330,9 @@ public sealed partial class BoxWindow : Window
             }
             else if (material == MaterialKind.Mica && MicaController.IsSupported())
             {
-                SystemBackdrop = new MicaBackdrop();
+                // Mica 在窗口失焦时会被系统压成纯色；Acrylic 失焦仍保留壁纸模糊，
+                // 这样桌面停靠时也能保持“活动”观感。
+                SystemBackdrop = new DesktopAcrylicBackdrop();
             }
             else if (material != MaterialKind.Solid && DesktopAcrylicController.IsSupported())
             {
@@ -663,6 +710,14 @@ public sealed partial class BoxWindow : Window
     private void OnRootGridLoaded(object sender, RoutedEventArgs e)
     {
         RootGrid.Loaded -= OnRootGridLoaded;
+        // Acrylic 在窗口首次显示后才真正挂载；再应用一次，避免启动时先出现纯色底。
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (!_closed)
+            {
+                ApplyBackdrop();
+            }
+        });
         if (RootGrid.XamlRoot is { } root)
         {
             _rasterScale = root.RasterizationScale;

@@ -1,3 +1,5 @@
+using Microsoft.UI.Dispatching;
+
 namespace PocketDesk;
 
 /// <summary>所有应用窗口的生命周期与布局。</summary>
@@ -7,6 +9,8 @@ public static class WindowManager
     private static BoxManagerWindow? _manager;
     private static SettingsWindow? _settings;
     private static bool _initialized;
+    private static DispatcherQueueTimer? _desktopWatcher;
+    private static bool _desktopForeground;
 
     public static void Initialize()
     {
@@ -20,6 +24,39 @@ public static class WindowManager
         AccessibilityService.Changed += ApplySettingsToWindows;
         BoxService.BoxesChanged += OnBoxesChanged;
         ImportService.BoxChanged += OnBoxContentChanged;
+        StartDesktopWatcher();
+    }
+
+    private static void StartDesktopWatcher()
+    {
+        var dispatcher = DispatcherQueue.GetForCurrentThread();
+        if (dispatcher is null)
+        {
+            return;
+        }
+
+        _desktopWatcher = dispatcher.CreateTimer();
+        _desktopWatcher.Interval = TimeSpan.FromMilliseconds(400);
+        _desktopWatcher.Tick += (_, _) => UpdateDesktopForeground();
+        _desktopWatcher.Start();
+    }
+
+    private static void UpdateDesktopForeground()
+    {
+        var hwnd = NativeMethods.GetForegroundWindow();
+        var className = new System.Text.StringBuilder(64);
+        NativeMethods.GetClassName(hwnd, className, className.Capacity);
+        var desktop = className.ToString() is "Progman" or "WorkerW";
+        if (desktop == _desktopForeground)
+        {
+            return;
+        }
+
+        _desktopForeground = desktop;
+        foreach (var window in BoxWindows.Values)
+        {
+            window.SetDesktopMode(desktop);
+        }
     }
 
     public static void RestoreLayout()
@@ -193,8 +230,7 @@ public static class WindowManager
     }
 
     public static void PersistAllPlacements()
-    {
-        foreach (var window in BoxWindows.Values)
+    {        foreach (var window in BoxWindows.Values)
         {
             window.PersistPlacement();
         }
