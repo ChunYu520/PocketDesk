@@ -114,8 +114,8 @@ public sealed partial class BoxWindow : Window
 
             if (AppWindow.Presenter is OverlappedPresenter presenter)
             {
-                // 保留可缩放的原生边框（保证边缘拖拽与阴影），但去掉系统标题栏。
-                presenter.SetBorderAndTitleBar(true, false);
+                // 去掉系统标题栏和 1px 原生边框，避免边缘露出壁纸形成白线。
+                presenter.SetBorderAndTitleBar(false, false);
                 presenter.IsResizable = true;
                 presenter.IsMinimizable = true;
                 presenter.IsMaximizable = false;
@@ -135,7 +135,7 @@ public sealed partial class BoxWindow : Window
 
             var corner = NativeMethods.DWMWCP_ROUND;
             NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_WINDOW_CORNER_PREFERENCE, ref corner, sizeof(int));
-            var border = NativeMethods.DWMWA_COLOR_NONE;
+            var border = 0; // 黑色细边框，避免用 COLOR_NONE 时露出壁纸白边
             NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_BORDER_COLOR, ref border, sizeof(int));
         }
         catch (Exception ex)
@@ -371,8 +371,8 @@ public sealed partial class BoxWindow : Window
         else
         {
             RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            // 用很轻的深色遮罩保证文字可读，同时让 Mica/Acrylic 的壁纸模糊透出来。
-            BackgroundLayer.Background = new SolidColorBrush(Microsoft.UI.Colors.Black) { Opacity = 0.22 };
+            // 轻遮罩让 Mica/Acrylic 透出来，同时 BackgroundOpacity 滑条有可调对象。
+            BackgroundLayer.Background = new SolidColorBrush(Microsoft.UI.Colors.Black) { Opacity = 0.26 };
             BackgroundLayer.Visibility = Visibility.Visible;
         }
 
@@ -428,9 +428,12 @@ public sealed partial class BoxWindow : Window
         BackgroundLayer.CornerRadius = radius;
         BorderLayer.CornerRadius = radius;
         BackgroundLayer.Opacity = appearance.BackgroundOpacity;
-        BorderLayer.Opacity = appearance.BorderOpacity;
-        BorderLayer.BorderThickness = new Thickness(1);
-        BorderLayer.BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"];
+        BorderLayer.Opacity = 1;
+        BorderLayer.BorderThickness = appearance.BorderOpacity > 0.01 ? new Thickness(1) : new Thickness(0);
+        BorderLayer.BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.Black)
+        {
+            Opacity = Math.Clamp(appearance.BorderOpacity, 0, 1),
+        };
 
         ApplyLayout();
         ApplyItemAppearance(reloadIcons: true);
