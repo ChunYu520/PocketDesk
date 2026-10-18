@@ -42,6 +42,7 @@ public sealed partial class BoxWindow : Window
     private bool _marqueeActive;
     private bool _marqueeAdditive;
     private Point _marqueeStart;
+    private double _rasterScale = 1.0;
 
     private List<DeletedItemInfo> _lastDeleted = new();
 
@@ -84,6 +85,7 @@ public sealed partial class BoxWindow : Window
         _dropOverlayTimer.Tick += (_, _) => DropOverlay.Visibility = Visibility.Collapsed;
 
         ItemsView.ItemsSource = _items;
+        RootGrid.Loaded += OnRootGridLoaded;
         ItemsView.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnMarqueePointerPressed), true);
         ItemsView.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(OnMarqueePointerMoved), true);
         ItemsView.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnMarqueePointerReleased), true);
@@ -618,6 +620,7 @@ public sealed partial class BoxWindow : Window
     private async void LoadIcons()
     {
         var generation = ++_iconGeneration;
+        var scale = RootGrid.XamlRoot?.RasterizationScale ?? DpiUtil.SystemScale;
         var tasks = new List<Task>();
         foreach (var item in _items.ToList())
         {
@@ -631,7 +634,7 @@ public sealed partial class BoxWindow : Window
                 continue;
             }
 
-            tasks.Add(LoadIconAsync(item, generation));
+            tasks.Add(LoadIconAsync(item, generation, scale));
         }
 
         try
@@ -644,13 +647,44 @@ public sealed partial class BoxWindow : Window
         }
     }
 
-    private async Task LoadIconAsync(BoxItem item, int generation)
+    private async Task LoadIconAsync(BoxItem item, int generation, double scale)
     {
-        var icon = await IconService.LoadAsync(item.RealPath, (int)item.IconSize, item.Kind == ItemKind.Folder);
+        // Shell 只保证 16/32/48/256 等标准尺寸；96px 对部分文件会退回通用图标。
+        // 高 DPI 下按物理像素取 Jumbo（256），低 DPI 取 48。
+        var physical = item.IconSize * scale;
+        var pixels = physical <= 48 ? 48 : 256;
+        var icon = await IconService.LoadAsync(item.RealPath, pixels, item.Kind == ItemKind.Folder);
         if (icon is not null && generation == _iconGeneration && !_closed)
         {
             item.Icon = icon;
         }
+    }
+
+    private void OnRootGridLoaded(object sender, RoutedEventArgs e)
+    {
+        RootGrid.Loaded -= OnRootGridLoaded;
+        if (RootGrid.XamlRoot is { } root)
+        {
+            _rasterScale = root.RasterizationScale;
+            root.Changed += OnXamlRootChanged;
+        }
+    }
+
+    private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args)
+    {
+        var scale = sender.RasterizationScale;
+        if (Math.Abs(scale - _rasterScale) < 0.01)
+        {
+            return;
+        }
+
+        _rasterScale = scale;
+        foreach (var item in _items)
+        {
+            item.Icon = null;
+        }
+
+        LoadIcons();
     }
 
     private void UpdateEmptyState()

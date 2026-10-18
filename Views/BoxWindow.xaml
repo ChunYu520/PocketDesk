@@ -34,6 +34,7 @@
                     <FontIcon Glyph="{x:Bind KindGlyph}"
                               FontSize="{x:Bind IconSize, Mode=OneWay}"
                               Opacity="0.28"
+                              Visibility="{x:Bind PlaceholderVisibility, Mode=OneWay}"
                               HorizontalAlignment="Center"
                               VerticalAlignment="Center" />
                     <Image Source="{x:Bind Icon, Mode=OneWay}"
@@ -79,7 +80,8 @@
                 </Grid.ColumnDefinitions>
 
                 <Grid Width="32" Height="32">
-                    <FontIcon Glyph="{x:Bind KindGlyph}" FontSize="22" Opacity="0.28" />
+                    <FontIcon Glyph="{x:Bind KindGlyph}" FontSize="22" Opacity="0.28"
+                              Visibility="{x:Bind PlaceholderVisibility, Mode=OneWay}" />
                     <Image Source="{x:Bind Icon, Mode=OneWay}" Width="32" Height="32" Stretch="Uniform" />
                 </Grid>
 

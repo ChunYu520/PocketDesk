@@ -221,8 +221,18 @@ public sealed class BoxItem : INotifyPropertyChanged
     public ImageSource? Icon
     {
         get => _icon;
-        set => SetField(ref _icon, value);
+        set
+        {
+            if (SetField(ref _icon, value))
+            {
+                OnPropertyChanged(nameof(PlaceholderVisibility));
+            }
+        }
     }
+
+    /// <summary>图标未加载/加载失败时显示占位字形；加载成功后隐藏，避免叠在真实图标下面。</summary>
+    [JsonIgnore]
+    public Visibility PlaceholderVisibility => _icon is null ? Visibility.Visible : Visibility.Collapsed;
 
     [JsonIgnore]
     public double IconSize

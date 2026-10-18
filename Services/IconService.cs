@@ -12,7 +12,7 @@ namespace PocketDesk;
 /// </summary>
 public static class IconService
 {
-    private const int MaxCacheEntries = 768;
+    private const int MaxCacheEntries = 256;
 
     private static readonly ConcurrentDictionary<string, SoftwareBitmapSource> Cache =
         new(StringComparer.OrdinalIgnoreCase);
@@ -46,6 +46,7 @@ public static class IconService
             var pixels = await Task.Run(() => ExtractPixels(path, iconSize, isDirectory)).ConfigureAwait(true);
             if (pixels is null)
             {
+                LogService.Warn($"图标像素为空：{Path.GetFileName(path)} size={iconSize}");
                 return null;
             }
 
@@ -106,6 +107,7 @@ public static class IconService
                 out var hBitmap);
             if (hr != 0 || hBitmap == IntPtr.Zero)
             {
+                LogService.Warn($"图标提取失败：{Path.GetFileName(path)} size={size} hr=0x{hr:X8}");
                 return null;
             }
 

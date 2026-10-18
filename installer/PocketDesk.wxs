@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="PocketDesk"
            Manufacturer="PocketDesk"
            Version="1.0.0"
            UpgradeCode="C0C27D7D-6E42-4E5A-A621-0B1F0F7F7E11"
            Scope="perUser"
            Compressed="yes"
+           Codepage="936"
            Language="1033">
 
     <MajorUpgrade AllowSameVersionUpgrades="yes"
@@ -14,6 +16,9 @@
 
     <Property Id="ALLUSERS" Value="2" />
     <Property Id="MSIINSTALLPERUSER" Value="1" />
+
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseFile)" />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
 
     <Icon Id="AppIcon" SourceFile="$(var.PublishDir)\Assets\AppIcon.ico" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon" />

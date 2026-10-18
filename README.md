@@ -53,26 +53,30 @@ dotnet build -p:Platform=x64
 
 ## 安装包
 
-`..\Pack\` 下提供三个架构的 Inno Setup 安装包（按当前用户安装，无需管理员权限）：
+`..\Pack\` 提供两个架构的 MSI 安装包：
 
 | 文件 | 适用平台 |
 |---|---|
-| `PocketDesk-1.0.0-ARM64-Setup.exe` | Windows on ARM（原生） |
-| `PocketDesk-1.0.0-x86-Setup.exe` | 32 位 Windows（也可在 x64/ARM64 上兼容运行） |
-| `PocketDesk-1.0.0-x64-Setup.exe` | 64 位 Intel/AMD（可选） |
+| `PocketDesk-1.0.0-ARM64.msi` | Windows on ARM（原生） |
+| `PocketDesk-1.0.0-x64.msi` | 64 位 Intel/AMD |
 
-- 默认安装到 `%LOCALAPPDATA%\Programs\PocketDesk`，开始菜单快捷方式；桌面快捷方式为可选任务。
-- 卸载时询问“还原普通盒文件 / 保留数据 / 删除全部数据”，默认保留数据；静默卸载也保留数据。
+- MSI 带标准安装向导：欢迎 → 许可 → 安装目录 → 安装 → 完成。
+- 默认安装到 `%LOCALAPPDATA%\Programs\PocketDesk`，开始菜单快捷方式；安装无需管理员权限。
+- 卸载默认保留 `%LOCALAPPDATA%\PocketDesk` 数据目录，并调用应用清理开机自启项。
 - 安装包未做代码签名，SmartScreen 会提示，需“更多信息 → 仍要运行”。
-- 安装脚本：[installer/PocketDesk.iss](installer/PocketDesk.iss)
+- MSI 脚本：[installer/PocketDesk.wxs](installer/PocketDesk.wxs)（WiX 5；WiX 7 需接受 OSMF 协议故未使用）
 
 ```powershell
 dotnet publish -c Release -p:Platform=ARM64
-dotnet publish -c Release -p:Platform=x86
+dotnet publish -c Release -p:Platform=x64
 
-ISCC.exe /DBuildArch=arm64 installer\PocketDesk.iss
-ISCC.exe /DBuildArch=x86   installer\PocketDesk.iss
+wix build -arch arm64 -ext WixToolset.UI.wixext `
+  -d PublishDir=bin\Release\net10.0-windows10.0.26100.0\win-arm64\publish `
+  -d LicenseFile=installer\License.rtf `
+  -o ..\Pack\PocketDesk-1.0.0-ARM64.msi installer\PocketDesk.wxs
 ```
+
+> 为了让 MSI 以当前用户安装，构建后把 MSI Summary Information 的 Word Count 提权位（0x8）清零；否则 Windows Installer 会按 per-machine 处理。
 
 ## 首次使用
 
@@ -158,7 +162,7 @@ Views/
 - **磁力访问窗、快速面板**未实现（PRD 已列为 P1）。
 - **导入/导出/完整备份**未实现（P1）；目前仅有诊断日志导出。
 - **Native AOT** 暂未打通。项目已预留 `dotnet publish -c Release -r win-x64 -p:AotPublish=true` 开关，但当前 `WinAppSDK 2.5.1 + WinUI 2.3.9` 组合下，XAML 编译器在 Pass1 即报 `WMC1007 Cannot resolve metadata for WinUI types`；`WindowsAppSDKSelfContained` 开/关、`PublishTrimmed` 开/关、显式 CsWinRT 2.3.1、`net8.0-windows` 与 `net10.0-windows` 目标均复现。Release 仍为自包含、不裁剪；需要更换到 PRD 基线的 WinAppSDK 1.6/1.7 + .NET 8 工具链后再验证 AOT。
-- **MSIX** 未做；当前提供 Inno Setup 安装包（ARM64 / x86 / x64），尚未做代码签名，SmartScreen 会提示未知发布者。
+- **MSIX** 未做；当前提供 MSI 安装包（ARM64 / x64），尚未做代码签名，SmartScreen 会提示未知发布者。
 - 目标盒同步为单向补充（外部新增会显示，外部删除不会自动移除记录），完整双向同步待完善。
 - 自定义排序已支持菜单上移/下移，尚不支持直接拖拽图标调整顺序。
 - 框选暂不支持滚动时自动扩展选择范围；虚拟化到屏幕外的项目需滚动后重新框选。
