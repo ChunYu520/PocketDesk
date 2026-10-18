@@ -23,7 +23,8 @@
 - 拖出到资源管理器已做真实端到端验证（合成鼠标拖拽，复制到目标文件夹）
 - 支持键盘：`Tab`/`Shift+Tab` 在图标间移动、`Enter` 打开、`F2` 重命名、`Delete` 删除、`Ctrl+A` 全选；图标暴露 `AutomationProperties.Name`
 - 高对比度：检测到系统高对比度时强制纯色背景、禁用 Mica/Acrylic，并跟随系统主题
-- 托盘菜单、开机自启、单实例、关闭到托盘、撤销删除（Toast/InfoBar）
+- 托盘菜单、开机自启、单实例、关闭到托盘、撤销删除（Toast/InfoBar）；托盘命令在菜单关闭后投递到 UI 队列，避免原生菜单回调里打开窗口导致卡死
+- 右键“背景透明度”快速预设 20%–100%，外观对话框内仍有背景/边框不透明度滑条
 - 收纳盒管理器：创建/重命名/复制（仅配置）/显示隐藏/排序/贴边排列/分组筛选，按分组设置
 - 右键“创建快捷方式”：在桌面生成 `.lnk`（文件/文件夹）或 `.url`（网址）
 - 统一设置（常规/外观/行为/存储/关于）、诊断日志导出
@@ -64,17 +65,20 @@ dotnet build -p:Platform=ARM64
 | `PocketDesk-1.0.0-ARM64.msi` | Windows on ARM（原生） |
 | `PocketDesk-1.0.0-x64.msi` | 64 位 Intel/AMD |
 
-- MSI 带标准安装向导：欢迎 → 许可 → 安装目录 → 安装 → 完成。
-- 默认安装到 `%LOCALAPPDATA%\Programs\PocketDesk`，开始菜单快捷方式；安装无需管理员权限。
+- MSI 带中文安装向导：欢迎 → 许可协议 → 自定义安装（功能选择） → 安装 → 完成。
+- “自定义安装”中可勾选/取消 **桌面快捷方式**；开始菜单快捷方式始终创建。
+- 默认安装到 `%LOCALAPPDATA%\Programs\PocketDesk`，安装无需管理员权限，也不会弹出 cmd 窗口。
 - 卸载默认保留 `%LOCALAPPDATA%\PocketDesk` 数据目录，并调用应用清理开机自启项。
 - 安装包未做代码签名，SmartScreen 会提示，需“更多信息 → 仍要运行”。
 - MSI 脚本：[installer/PocketDesk.wxs](installer/PocketDesk.wxs)（WiX 5；WiX 7 需接受 OSMF 协议故未使用）
+- 中文界面资源：[installer/WixUI_zh-CN.wxl](installer/WixUI_zh-CN.wxl)；许可页：[installer/License.rtf](installer/License.rtf)
 
 ```powershell
 dotnet publish -c Release -p:Platform=ARM64
 dotnet publish -c Release -p:Platform=x64
 
 wix build -arch arm64 -ext WixToolset.UI.wixext `
+  -loc installer\WixUI_zh-CN.wxl `
   -d PublishDir=bin\Release\net10.0-windows10.0.26100.0\win-arm64\publish `
   -d LicenseFile=installer\License.rtf `
   -o ..\Pack\PocketDesk-1.0.0-ARM64.msi installer\PocketDesk.wxs
@@ -125,6 +129,8 @@ wix build -arch arm64 -ext WixToolset.UI.wixext `
 - 窗口中心点命中测试属于其他进程 → 失焦后确实沉在普通窗口下方
 - 开机自启：设置中开启后 HKCU Run 写入带引号的 exe 路径，关闭后删除
 - 托盘：`Shell_NotifyIconGetRect` 确认图标注册；左键显示全部；Win11 溢出面板中真实右键打开原生菜单，选择“显示全部收纳盒”后隐藏的收纳盒恢复显示
+- 托盘“新建收纳盒”：菜单命令延迟到 DispatcherQueue 执行，管理器正常打开，进程保持响应
+- 背景透明度：右键菜单 20%/40%/60%/70%/80%/90%/100% 预设可即时预览并保存
 - 单实例：二次启动进程退出并唤醒已有实例；关闭到托盘、托盘退出、200% DPI、Release 自包含发布均通过
 - MSI：ARM64 包静默安装 → 安装目录含 `PocketDesk.pri`/XBF/Assets → GUI 正常打开；卸载保留数据并清理 HKCU 自启项；安装向导可正常启动（Welcome 页），许可/安装目录页由 `WixUI_InstallDir` 提供
 - Release 自包含发布（含 .NET 运行时与 Windows App SDK）通过同一套 27 项自测
@@ -178,7 +184,8 @@ installer/
 - **Native AOT** 暂未打通。项目已预留 `dotnet publish -c Release -r win-x64 -p:AotPublish=true` 开关，但当前 `WinAppSDK 2.5.1 + WinUI 2.3.9` 组合下，XAML 编译器在 Pass1 即报 `WMC1007 Cannot resolve metadata for WinUI types`；`WindowsAppSDKSelfContained` 开/关、`PublishTrimmed` 开/关、显式 CsWinRT 2.3.1、`net8.0-windows` 与 `net10.0-windows` 目标均复现。Release 仍为自包含、不裁剪；需要更换到 PRD 基线的 WinAppSDK 1.6/1.7 + .NET 8 工具链后再验证 AOT。
 - **MSIX** 未做；当前提供 MSI 安装包（ARM64 / x64），尚未做代码签名，SmartScreen 会提示未知发布者。
 - MSI 卸载默认**保留数据**并清理自启项，不提供 EXE 安装器那种“还原/保留/删除”三选一；需要在卸载前还原普通盒文件时，请先在应用内删除对应收纳盒/收纳项。
-- MSI 安装向导为 WiX 标准英文界面（欢迎 / 许可 / 安装目录 / 完成），尚未做中文资源化。
+- MSI 使用功能树选择“桌面快捷方式”，不提供安装路径页；安装目录固定为 `%LOCALAPPDATA%\Programs\PocketDesk`。
+- 背景透明度主要作用于 Mica/Acrylic 材质；纯色材质本身不透明，需要透出壁纸时请选择 Mica 或 Acrylic。
 - x86 安装包已按需求移除，仅保留 ARM64 与 x64。
 - 目标盒同步为单向补充（外部新增会显示，外部删除不会自动移除记录），完整双向同步待完善。
 - 自定义排序已支持菜单上移/下移，尚不支持直接拖拽图标调整顺序。

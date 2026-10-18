@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Microsoft.UI.Dispatching;
 
 namespace PocketDesk;
 
@@ -9,6 +10,7 @@ public sealed class TrayIcon : IDisposable
     private const uint IconId = 1;
 
     private readonly NativeMethods.WndProc _wndProc;
+    private readonly DispatcherQueue? _dispatcher;
     private readonly string _className = "PocketDesk.Tray." + Guid.NewGuid().ToString("N");
     private IntPtr _hwnd;
     private IntPtr _hIcon;
@@ -24,6 +26,7 @@ public sealed class TrayIcon : IDisposable
 
     public TrayIcon(string tooltip = "PocketDesk")
     {
+        _dispatcher = DispatcherQueue.GetForCurrentThread();
         _wndProc = WindowProc;
         CreateHostWindow();
         CreateIcon();
@@ -159,12 +162,12 @@ public sealed class TrayIcon : IDisposable
                     ShowMenu();
                     return IntPtr.Zero;
                 case NativeMethods.WM_LBUTTONDBLCLK:
-                    SafeInvoke(ManagerRequested);
+                    Dispatch(ManagerRequested);
                     return IntPtr.Zero;
                 case NativeMethods.WM_LBUTTONUP:
                 case NativeMethods.NIN_SELECT:
                 case NativeMethods.NIN_KEYSELECT:
-                    SafeInvoke(ShowAllRequested);
+                    Dispatch(ShowAllRequested);
                     return IntPtr.Zero;
             }
 
@@ -214,28 +217,45 @@ public sealed class TrayIcon : IDisposable
             switch (command)
             {
                 case 1:
-                    SafeInvoke(ShowAllRequested);
+                    Dispatch(ShowAllRequested);
                     break;
                 case 2:
-                    SafeInvoke(HideAllRequested);
+                    Dispatch(HideAllRequested);
                     break;
                 case 3:
-                    SafeInvoke(NewBoxRequested);
+                    Dispatch(NewBoxRequested);
                     break;
                 case 4:
-                    SafeInvoke(ManagerRequested);
+                    Dispatch(ManagerRequested);
                     break;
                 case 5:
-                    SafeInvoke(SettingsRequested);
+                    Dispatch(SettingsRequested);
                     break;
                 case 6:
-                    SafeInvoke(ExitRequested);
+                    Dispatch(ExitRequested);
                     break;
             }
         }
         finally
         {
             NativeMethods.DestroyMenu(menu);
+        }
+    }
+
+    /// <summary>
+    /// 托盘菜单位于原生窗口过程/菜单消息循环中，直接创建窗口或弹出 ContentDialog 会在
+    /// WinUI 消息循环里形成重入甚至卡死；统一投递到 DispatcherQueue，等菜单关闭后再执行。
+    /// </summary>
+    private void Dispatch(Action? action)
+    {
+        if (action is null)
+        {
+            return;
+        }
+
+        if (_dispatcher is null || !_dispatcher.TryEnqueue(() => SafeInvoke(action)))
+        {
+            SafeInvoke(action);
         }
     }
 

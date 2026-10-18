@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="PocketDesk"
@@ -8,7 +8,7 @@
            Scope="perUser"
            Compressed="yes"
            Codepage="936"
-           Language="1033">
+           Language="2052">
 
     <MajorUpgrade AllowSameVersionUpgrades="yes"
                   DowngradeErrorMessage="已安装更新版本的 PocketDesk。" />
@@ -18,7 +18,7 @@
     <Property Id="MSIINSTALLPERUSER" Value="1" />
 
     <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseFile)" />
-    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <ui:WixUI Id="WixUI_FeatureTree" />
 
     <Icon Id="AppIcon" SourceFile="$(var.PublishDir)\Assets\AppIcon.ico" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon" />
@@ -35,6 +35,10 @@
       <Directory Id="AppMenuDir" Name="PocketDesk" />
     </StandardDirectory>
 
+    <StandardDirectory Id="DesktopFolder">
+      <Directory Id="DesktopDir" />
+    </StandardDirectory>
+
     <ComponentGroup Id="AppFiles">
       <Files Include="$(var.PublishDir)\**" Directory="INSTALLFOLDER" />
     </ComponentGroup>
@@ -49,25 +53,25 @@
       <RegistryValue Root="HKCU" Key="Software\PocketDesk" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
     </Component>
 
-    <Feature Id="MainFeature" Title="PocketDesk" Level="1" Display="1">
+    <Component Id="DesktopShortcut" Directory="DesktopDir" Guid="6F2E7D6B-0C2A-46D0-9C3B-2C8A3F31B2A4">
+      <Shortcut Id="PocketDeskDesktopShortcut"
+                Name="PocketDesk"
+                Description="桌面原生收纳层"
+                Target="[INSTALLFOLDER]PocketDesk.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RegistryValue Root="HKCU" Key="Software\PocketDesk" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Feature Id="MainFeature" Title="PocketDesk 主程序" Description="PocketDesk 桌面收纳层及开始菜单快捷方式。" Level="1" Display="1" AllowAbsent="no">
       <ComponentGroupRef Id="AppFiles" />
       <ComponentRef Id="StartMenuShortcut" />
     </Feature>
 
-    <CustomAction Id="KillBeforeInstall"
-                  Directory="SystemFolder"
-                  ExeCommand="taskkill.exe /IM PocketDesk.exe /F /T"
-                  Execute="deferred"
-                  Impersonate="yes"
-                  Return="ignore" />
+    <Feature Id="DesktopShortcutFeature" Title="桌面快捷方式" Description="在桌面创建 PocketDesk 快捷方式（可取消勾选）。" Level="1" Display="2">
+      <ComponentRef Id="DesktopShortcut" />
+    </Feature>
 
-    <CustomAction Id="KillBeforeUninstall"
-                  Directory="SystemFolder"
-                  ExeCommand="taskkill.exe /IM PocketDesk.exe /F /T"
-                  Execute="deferred"
-                  Impersonate="yes"
-                  Return="ignore" />
-
+    <!-- 卸载前清理自启项；PocketDesk 是 WinExe，不会弹出控制台窗口。 -->
     <CustomAction Id="UninstallCleanup"
                   Directory="INSTALLFOLDER"
                   ExeCommand="&quot;[INSTALLFOLDER]PocketDesk.exe&quot; --uninstall=keep"
@@ -76,8 +80,6 @@
                   Return="ignore" />
 
     <InstallExecuteSequence>
-      <Custom Action="KillBeforeInstall" Before="InstallFiles" Condition="NOT REMOVE" />
-      <Custom Action="KillBeforeUninstall" Before="UninstallCleanup" Condition='REMOVE~="ALL"' />
       <Custom Action="UninstallCleanup" Before="RemoveFiles" Condition='REMOVE~="ALL"' />
     </InstallExecuteSequence>
   </Package>
