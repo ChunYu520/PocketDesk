@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Window
     x:Class="PocketDesk.BoxWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -116,7 +116,13 @@
         <Border x:Name="BackgroundLayer"
                 Grid.RowSpan="3"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                IsHitTestVisible="False" />
+                IsHitTestVisible="False">
+            <Image x:Name="WallpaperImage"
+                   Stretch="Fill"
+                   HorizontalAlignment="Left"
+                   VerticalAlignment="Top"
+                   IsHitTestVisible="False" />
+        </Border>
         <Border x:Name="TintLayer"
                 Grid.RowSpan="3"
                 Background="#000000"

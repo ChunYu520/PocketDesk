@@ -29,6 +29,7 @@ public sealed partial class BoxWindow : Window
 
     private bool _closed;
     private bool _forceClose;
+    private int _backdropGeneration;
     private bool _isRolledUp;
     private bool _placementApplied;
     private int _expandedHeight = 320;
@@ -156,6 +157,7 @@ public sealed partial class BoxWindow : Window
         DragArea.PointerCaptureLost += OnDragAreaPointerReleased;
 
         BoxService.BoxesChanged += OnBoxesChanged;
+        BackgroundLayer.SizeChanged += (_, _) => UpdateWallpaperImagePosition();
     }
 
     private void OnFirstActivated(object sender, WindowActivatedEventArgs args)
@@ -311,64 +313,87 @@ public sealed partial class BoxWindow : Window
         return Enum.TryParse<ThemeKind>(value, true, out var parsed) ? parsed : ThemeKind.System;
     }
 
-    private void ApplyBackdrop()
+    private async void ApplyBackdrop()
     {
         var material = ResolveMaterial();
+        var generation = ++_backdropGeneration;
         try
         {
-            if (!AccessibilityService.IsHighContrast && material != MaterialKind.Solid && TryApplyWallpaper())
+            if (!AccessibilityService.IsHighContrast && material != MaterialKind.Solid &&
+                await TryApplyWallpaper(generation))
             {
                 return;
             }
 
-            // 高对比度/纯色，或取不到壁纸时使用纯色底。
-            ApplySolidScene();
+            if (generation == _backdropGeneration)
+            {
+                ApplySolidScene();
+            }
         }
         catch (Exception ex)
         {
             LogService.Warn($"设置窗口材质失败：{ex.GetType().Name}");
-            ApplySolidScene();
+            if (generation == _backdropGeneration)
+            {
+                ApplySolidScene();
+            }
         }
     }
 
-    /// <summary>
-    /// 直接绘制当前系统壁纸，并叠加半透明色调。它不依赖窗口焦点，
-    /// 所有收纳盒无论是否处于焦点都是同一套活动外观。
-    /// </summary>
-    private bool TryApplyWallpaper()
+    /// <summary>截取桌面壁纸层整屏图，并按窗口在屏幕上的位置平移，显示“盒子后面那一块”。</summary>
+    private async Task<bool> TryApplyWallpaper(int generation)
     {
-        var path = NativeMethods.GetWallpaperPath();
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        var snapshot = await DesktopCaptureService.GetAsync();
+        if (snapshot is null || generation != _backdropGeneration || _closed)
         {
             return false;
         }
 
-        try
+        WallpaperImage.Source = snapshot.Source;
+        WallpaperImage.Visibility = Visibility.Visible;
+        BackgroundLayer.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        BackgroundLayer.Visibility = Visibility.Visible;
+        TintLayer.Visibility = Visibility.Visible;
+        RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        SystemBackdrop = null;
+        UpdateWallpaperImagePosition();
+        return true;
+    }
+
+    private void UpdateWallpaperImagePosition()
+    {
+        if (WallpaperImage.Source is null || RootGrid.XamlRoot is null)
         {
-            var image = new BitmapImage();
-            image.UriSource = new Uri(path, UriKind.Absolute);
-            BackgroundLayer.Background = new ImageBrush
-            {
-                ImageSource = image,
-                Stretch = Stretch.UniformToFill,
-                AlignmentX = AlignmentX.Center,
-                AlignmentY = AlignmentY.Center,
-            };
-            BackgroundLayer.Visibility = Visibility.Visible;
-            TintLayer.Visibility = Visibility.Visible;
-            RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            SystemBackdrop = null;
-            return true;
+            return;
         }
-        catch (Exception ex)
+
+        var scale = RootGrid.XamlRoot.RasterizationScale;
+        if (scale <= 0)
         {
-            LogService.Warn($"壁纸背景失败：{ex.GetType().Name}");
-            return false;
+            scale = 1;
         }
+
+        var screenWidth = NativeMethods.GetSystemMetrics(0);
+        var screenHeight = NativeMethods.GetSystemMetrics(1);
+        var position = AppWindow.Position;
+        WallpaperImage.Width = screenWidth / scale + 200;
+        WallpaperImage.Height = screenHeight / scale + 200;
+        WallpaperImage.RenderTransform = new TranslateTransform
+        {
+            X = -position.X / scale,
+            Y = -position.Y / scale,
+        };
+        BackgroundLayer.Clip = new RectangleGeometry
+        {
+            Rect = new Rect(0, 0, BackgroundLayer.ActualWidth, BackgroundLayer.ActualHeight),
+        };
     }
 
     private void ApplySolidScene()
     {
+        _backdropGeneration++;
+        WallpaperImage.Source = null;
+        WallpaperImage.Visibility = Visibility.Collapsed;
         SystemBackdrop = null;
         RootGrid.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
         BackgroundLayer.Visibility = Visibility.Collapsed;
@@ -544,6 +569,7 @@ public sealed partial class BoxWindow : Window
     {
         if (args.DidPositionChange || args.DidSizeChange)
         {
+            UpdateWallpaperImagePosition();
             if (!_isRolledUp && AppWindow.Size.Height > 80)
             {
                 _expandedHeight = AppWindow.Size.Height;
