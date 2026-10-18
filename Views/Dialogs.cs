@@ -225,18 +225,6 @@ public static class Dialogs
         var borderValue = new TextBlock { Text = $"{appearance.BorderOpacity:P0}", FontSize = 12, Opacity = 0.7 };
         borderSlider.ValueChanged += (_, e) => borderValue.Text = $"{e.NewValue:P0}";
 
-        var borderThicknessSlider = new Slider { Minimum = 0, Maximum = 4, StepFrequency = 1, Value = Math.Clamp(appearance.BorderThickness, 0, 4) };
-        var borderThicknessValue = new TextBlock { Text = $"{appearance.BorderThickness:0} px", FontSize = 12, Opacity = 0.7 };
-        borderThicknessSlider.ValueChanged += (_, e) => borderThicknessValue.Text = $"{e.NewValue:0} px";
-
-        var borderColor = new ColorPicker
-        {
-            IsAlphaEnabled = false,
-            IsColorChannelTextInputVisible = true,
-            IsHexInputVisible = true,
-            Color = ParseHexColor(appearance.BorderColor),
-        };
-
         var columnsSlider = new Slider { Minimum = 0, Maximum = 9, StepFrequency = 1, Value = appearance.Columns };
         var columnsValue = new TextBlock { Text = appearance.Columns == 0 ? "自适应" : $"{appearance.Columns} 列", FontSize = 12, Opacity = 0.7 };
         columnsSlider.ValueChanged += (_, e) =>
@@ -256,9 +244,6 @@ public static class Dialogs
         panel.Children.Add(Labeled("图标大小", new StackPanel { Children = { iconSlider, iconValue } }));
         panel.Children.Add(Labeled("外框圆角", new StackPanel { Children = { radiusSlider, radiusValue } }));
         panel.Children.Add(Labeled("背景不透明度", new StackPanel { Children = { backgroundSlider, backgroundValue } }));
-        panel.Children.Add(Labeled("边框不透明度", new StackPanel { Children = { borderSlider, borderValue } }));
-        panel.Children.Add(Labeled("边框粗细", new StackPanel { Children = { borderThicknessSlider, borderThicknessValue } }));
-        panel.Children.Add(Labeled("边框颜色", borderColor));
         panel.Children.Add(Labeled("网格列数", new StackPanel { Children = { columnsSlider, columnsValue } }));
         panel.Children.Add(Labeled("文件名显示", lines));
 
@@ -310,9 +295,6 @@ public static class Dialogs
             appearance.IconSize = iconSlider.Value;
             appearance.CornerRadius = radiusSlider.Value;
             appearance.BackgroundOpacity = backgroundSlider.Value;
-            appearance.BorderOpacity = borderSlider.Value;
-            appearance.BorderThickness = borderThicknessSlider.Value;
-            appearance.BorderColor = $"#{borderColor.Color.A:X2}{borderColor.Color.R:X2}{borderColor.Color.G:X2}{borderColor.Color.B:X2}";
             appearance.Columns = (int)Math.Round(columnsSlider.Value);
             appearance.NameLines = lines.SelectedIndex;
             result = appearance;

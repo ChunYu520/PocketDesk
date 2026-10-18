@@ -117,9 +117,13 @@ public sealed partial class BoxWindow : Window
 
             if (AppWindow.Presenter is OverlappedPresenter presenter)
             {
-                // 保留系统圆角；隐藏标题栏，内容延伸到标题栏区域。
+                // 保留原生窗口/圆角，隐藏标题栏；边框颜色随后与背景色一致，消除白缝。
                 presenter.SetBorderAndTitleBar(true, false);
                 ExtendsContentIntoTitleBar = true;
+                // 把 1px 非客户区边框并入客户区，Mica/透明背景下不会露出一圈原生边框。
+                var margins = new NativeMethods.MARGINS { Left = 1, Right = 1, Top = 1, Bottom = 1 };
+                NativeMethods.DwmExtendFrameIntoClientArea(
+                    WinRT.Interop.WindowNative.GetWindowHandle(this), ref margins);
                 var titleBar = AppWindow.TitleBar;
                 titleBar.ExtendsContentIntoTitleBar = true;
                 titleBar.BackgroundColor = Microsoft.UI.Colors.Transparent;
@@ -150,7 +154,7 @@ public sealed partial class BoxWindow : Window
 
             var corner = NativeMethods.DWMWCP_ROUND;
             NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_WINDOW_CORNER_PREFERENCE, ref corner, sizeof(int));
-            var border = 0; // 黑色细边框，避免用 COLOR_NONE 时露出壁纸白边
+            var border = NativeMethods.DWMWA_COLOR_NONE;
             NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_BORDER_COLOR, ref border, sizeof(int));
         }
         catch (Exception ex)
@@ -351,62 +355,12 @@ public sealed partial class BoxWindow : Window
 
     private void ApplyBackdrop()
     {
-        var material = ResolveMaterial();
-        try
-        {
-            if (AccessibilityService.IsHighContrast)
-            {
-                // 高对比度下必须保证可读性：禁用 Mica/Acrylic。
-                SystemBackdrop = null;
-            }
-            else if (material == MaterialKind.Mica && MicaController.IsSupported())
-            {
-                SystemBackdrop = new MicaBackdrop();
-            }
-            else if (material != MaterialKind.Solid && DesktopAcrylicController.IsSupported())
-            {
-                SystemBackdrop = new DesktopAcrylicBackdrop();
-            }
-            else
-            {
-                SystemBackdrop = null;
-            }
-        }
-        catch (Exception ex)
-        {
-            LogService.Warn($"设置窗口材质失败：{ex.GetType().Name}");
-            SystemBackdrop = null;
-        }
-
-        if (SystemBackdrop is null)
-        {
-            RootGrid.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
-            BackgroundLayer.Visibility = Visibility.Collapsed;
-        }
-        else
-        {
-            RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            // 轻遮罩让 Mica/Acrylic 透出来，同时 BackgroundOpacity 滑条有可调对象。
-            BackgroundLayer.Background = new SolidColorBrush(Microsoft.UI.Colors.Black) { Opacity = 0.55 };
-            BackgroundLayer.Visibility = Visibility.Visible;
-        }
-
-        // 同时设置 DWM 系统背景类型，避免 WinUI SystemBackdrop 在某些 Win11 组合下不生效。
-        try
-        {
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-            var type = SystemBackdrop switch
-            {
-                MicaBackdrop => 2,       // DWMSBT_MAINWINDOW
-                DesktopAcrylicBackdrop => 3, // DWMSBT_TRANSIENTWINDOW
-                _ => 1,                  // DWMSBT_NONE
-            };
-            NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_SYSTEMBACKDROP_TYPE, ref type, sizeof(int));
-        }
-        catch
-        {
-            // 旧系统不支持时忽略。
-        }
+        // 系统 Mica/Acrylic 在当前 WinUI/系统组合下会透明或回退成纯色，
+        // 为保证浅色/深色、圆角与边缘都稳定，使用主题实色背景。
+        SystemBackdrop = null;
+        RootGrid.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
+        BackgroundLayer.Visibility = Visibility.Collapsed;
+        ApplyWindowBorderColor();
     }
 
     private MaterialKind ResolveMaterial()
@@ -434,6 +388,45 @@ public sealed partial class BoxWindow : Window
         ApplyTheme();
         ApplyBackdrop();
         ApplyAppearance();
+    }
+
+    private void ApplyWindowRegion(double radius)
+    {
+        try
+        {
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            var scale = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
+            var r = (int)Math.Round(Math.Clamp(radius, 0, 24) * scale);
+            if (r <= 0)
+            {
+                NativeMethods.SetWindowRgn(hwnd, IntPtr.Zero, true);
+                return;
+            }
+
+            var region = NativeMethods.CreateRoundRectRgn(0, 0, AppWindow.Size.Width + 1, AppWindow.Size.Height + 1, r, r);
+            if (region != IntPtr.Zero)
+            {
+                NativeMethods.SetWindowRgn(hwnd, region, true);
+            }
+        }
+        catch
+        {
+            // 忽略不支持的窗口状态。
+        }
+    }
+
+    private void ApplyWindowBorderColor()
+    {
+        try
+        {
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            var color = NativeMethods.DWMWA_COLOR_NONE;
+            NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_BORDER_COLOR, ref color, sizeof(int));
+        }
+        catch
+        {
+            // 旧系统忽略。
+        }
     }
 
     private static Windows.UI.Color ParseColor(string? value, Windows.UI.Color fallback)
@@ -472,11 +465,8 @@ public sealed partial class BoxWindow : Window
         var appearance = _box.Appearance;
         var radius = new CornerRadius(Math.Clamp(appearance.CornerRadius, 0, 24));
         BackgroundLayer.CornerRadius = radius;
-        BorderLayer.CornerRadius = radius;
         BackgroundLayer.Opacity = Math.Clamp(appearance.BackgroundOpacity, 0.1, 1.0);
-        BorderLayer.Opacity = Math.Clamp(appearance.BorderOpacity, 0, 1);
-        BorderLayer.BorderThickness = new Thickness(Math.Clamp(appearance.BorderThickness, 0, 4));
-        BorderLayer.BorderBrush = new SolidColorBrush(ParseColor(appearance.BorderColor, Microsoft.UI.Colors.Black));
+        ApplyWindowBorderColor();
         ApplyLayout();
         ApplyItemAppearance(reloadIcons: true);
         UpdateStatus();

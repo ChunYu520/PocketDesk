@@ -115,13 +115,8 @@
         <!-- 背景层：半透明材质底色 -->
         <Border x:Name="BackgroundLayer"
                 Grid.RowSpan="3"
+                Margin="-1"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                IsHitTestVisible="False" />
-        <Border x:Name="BorderLayer"
-                Grid.RowSpan="3"
-                BorderThickness="1"
-                CornerRadius="12"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 IsHitTestVisible="False" />
 
         <!-- 自绘标题栏 -->
