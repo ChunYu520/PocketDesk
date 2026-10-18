@@ -296,7 +296,7 @@ public sealed partial class SettingsWindow : Window
         var confirmed = await Dialogs.ConfirmAsync(
             Root,
             "应用默认外观",
-            $"将默认外观（图标、圆角、不透明度）应用到全部 {boxes.Count} 个收纳盒。\n每个收纳盒的材质与主题覆盖会保留。",
+            $"将默认外观（材质、主题、图标、圆角、不透明度）应用到全部 {boxes.Count} 个收纳盒。\n每个收纳盒原有的单盒材质/主题覆盖会被清除。",
             "应用",
             "取消");
         if (!confirmed)
@@ -308,8 +308,9 @@ public sealed partial class SettingsWindow : Window
         {
             var appearance = BoxAppearance.FromSettings(AppSettingsService.Current);
             appearance.View = box.Appearance.View;
-            appearance.Material = box.Appearance.Material;
-            appearance.Theme = box.Appearance.Theme;
+            // 跟随全局材质/主题：清除单盒覆盖，否则下拉切换永远看不到变化。
+            appearance.Material = null;
+            appearance.Theme = null;
             BoxService.SaveAppearance(box, appearance);
             WindowManager.GetWindow(box.Id)?.ApplyGlobalAppearance();
         }

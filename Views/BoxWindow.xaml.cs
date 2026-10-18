@@ -364,7 +364,7 @@ public sealed partial class BoxWindow : Window
             }
             else if (material == MaterialKind.Transparent)
             {
-                SystemBackdrop = new TransparentBackdrop();
+                SystemBackdrop = null;
             }
             else if (material == MaterialKind.Mica && MicaController.IsSupported())
             {
@@ -385,7 +385,7 @@ public sealed partial class BoxWindow : Window
             SystemBackdrop = null;
         }
 
-        if (material == MaterialKind.Transparent && SystemBackdrop is TransparentBackdrop)
+        if (material == MaterialKind.Transparent)
         {
             RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
             BackgroundLayer.Visibility = Visibility.Collapsed;
