@@ -6,7 +6,7 @@
 
 ## 当前状态
 
-已实现 PRD V1.1 的 **MVP（P0）主体**，并在 Windows 11 x64（200% DPI）上完成手工与自动化验证：
+已实现 PRD V1.1 的 **MVP（P0）主体**，并在 Windows 11 ARM64（200% DPI）与 x64 上完成手工与自动化验证：
 
 - 普通 / 映射 / 目标三种收纳盒（目标盒为 P1 基础能力）
 - 拖入、拖出、跨盒拖放、粘贴、粘贴路径收纳
@@ -15,10 +15,11 @@
 - 映射盒只存引用，重命名会同步源文件（AC-02）
 - 无边框 / Mica / 亚克力 / 纯色，跟随明暗主题与系统强调色
 - 桌面层行为：**不占任务栏、不进 Alt+Tab、失焦后沉到最底层**；只有显式“始终置顶”才浮起
-- 卷起、位置/尺寸记忆、多显示器校验、逐盒外观（圆角/透明度/图标大小/列数/文件名行数/网格或列表）
+- 卷起、位置/尺寸记忆、多显示器校验
 - 多选、框选（在图标区拖拽空白）、右键菜单、批量重命名（前缀 + 序号）、排序（名称自然排序/类型/修改时间/添加时间/自定义，自定义支持上移/下移）
 - 逐盒外观（圆角/透明度/图标大小/列数/文件名行数/网格或列表）+ 命名外观预设（保存/应用/删除）
-- 系统图标提取（`IShellItemImageFactory`，异步 + 内存缓存）
+- 系统图标提取（`IShellItemImageFactory`）：高 DPI 按 **256px Jumbo**、低 DPI 按 48px 物理像素提取；图标加载成功后自动隐藏占位层，避免发糊和叠加
+- 拖入、粘贴后列表即时刷新（`ObservableCollection`），无需切换视图或手动刷新
 - 拖出到资源管理器已做真实端到端验证（合成鼠标拖拽，复制到目标文件夹）
 - 支持键盘：`Tab`/`Shift+Tab` 在图标间移动、`Enter` 打开、`F2` 重命名、`Delete` 删除、`Ctrl+A` 全选；图标暴露 `AutomationProperties.Name`
 - 高对比度：检测到系统高对比度时强制纯色背景、禁用 Mica/Acrylic，并跟随系统主题
@@ -41,6 +42,9 @@
 cd PocketDesk
 dotnet build -p:Platform=x64
 .\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\PocketDesk.exe
+
+# ARM64 构建
+dotnet build -p:Platform=ARM64
 ```
 
 - 项目已启用 **Windows App SDK 自包含**（`WindowsAppSDKSelfContained=true`），无需预装 Windows App Runtime。
@@ -113,6 +117,8 @@ wix build -arch arm64 -ext WixToolset.UI.wixext `
 ## 已验证
 
 - 无界面自测 27/27：导入、原位还原、撤销、重命名、批量重命名、映射盒、同名冲突、自定义排序、外观预设、快捷方式、复制收纳盒、分组、journal 恢复、删除收纳盒
+- 拖入自动刷新：演示盒拖入文件后列表从 8 项立即变为 9 项，无需切换视图
+- 高 DPI 图标：200% 缩放下按 256px 提取，图标清晰；占位层在加载后隐藏，无半透明叠加
 - 框选：演示盒 8 项全部框选成功（UIA `SelectionPattern` 读取选中数为 8）
 - 真实鼠标拖拽：从收纳盒拖 `百合.png` 到资源管理器 `DragOutTest` 文件夹，成功生成副本，源文件保持在盒中
 - 任务栏 UIA 枚举中不存在 PocketDesk 按钮；`WS_EX_TOOLWINDOW` + `IsShownInSwitchers=false`
@@ -120,11 +126,13 @@ wix build -arch arm64 -ext WixToolset.UI.wixext `
 - 开机自启：设置中开启后 HKCU Run 写入带引号的 exe 路径，关闭后删除
 - 托盘：`Shell_NotifyIconGetRect` 确认图标注册；左键显示全部；Win11 溢出面板中真实右键打开原生菜单，选择“显示全部收纳盒”后隐藏的收纳盒恢复显示
 - 单实例：二次启动进程退出并唤醒已有实例；关闭到托盘、托盘退出、200% DPI、Release 自包含发布均通过
-- Release 自包含发布（含 .NET 运行时与 Windows App SDK）通过同一套 21 项自测
+- MSI：ARM64 包静默安装 → 安装目录含 `PocketDesk.pri`/XBF/Assets → GUI 正常打开；卸载保留数据并清理 HKCU 自启项；安装向导可正常启动（Welcome 页），许可/安装目录页由 `WixUI_InstallDir` 提供
+- Release 自包含发布（含 .NET 运行时与 Windows App SDK）通过同一套 27 项自测
+- x64 MSI 已构建；x86 安装包已按需求移除
 
 ## 开发验证
 
-无界面自测（19 项断言，覆盖导入、原位还原、撤销、重命名、映射盒、同名冲突、journal 恢复、删除收纳盒）：
+无界面自测（27 项断言，覆盖导入、原位还原、撤销、重命名、批量重命名、映射盒、同名冲突、自定义排序、外观预设、快捷方式、复制收纳盒、分组、journal 恢复、删除收纳盒）：
 
 ```powershell
 $testRoot = "$PWD\.selftest"
@@ -146,7 +154,10 @@ Services/
   FileSystemService.cs    journal 移动、跨卷先复制校验后删除、原位还原、启动恢复
   ImportService.cs        收纳规则、冲突/云文件/UNC/链接/大文件策略
   BoxService.cs           收纳盒与收纳项 CRUD、排序、删除/撤销、目标盒同步
-  IconService.cs          Shell 图标提取 + SoftwareBitmap + 缓存
+  IconService.cs          Shell 图标提取（48/256 物理像素）+ SoftwareBitmap + 缓存
+  AccessibilityService.cs 高对比度/主题检测
+  AppearancePresetService.cs 外观预设
+  UninstallService.cs     卸载时的还原/保留/删除数据策略
   TrayIcon.cs             Shell_NotifyIcon 托盘与原生菜单
   SingleInstanceService.cs Mutex + 命名管道（show/manager/settings/hide/exit）
   WindowManager.cs        窗口生命周期、贴边排列、退出清理
@@ -155,6 +166,9 @@ Views/
   BoxManagerWindow.xaml   收纳盒管理器
   SettingsWindow.xaml     NavigationView 设置
   Dialogs.cs              ContentDialog（冲突/重命名/外观/确认）
+installer/
+  PocketDesk.wxs          WiX 5 MSI 定义（向导、快捷方式、卸载清理）
+  License.rtf             安装向导许可页
 ```
 
 ## 已知限制 / 后续
@@ -163,6 +177,9 @@ Views/
 - **导入/导出/完整备份**未实现（P1）；目前仅有诊断日志导出。
 - **Native AOT** 暂未打通。项目已预留 `dotnet publish -c Release -r win-x64 -p:AotPublish=true` 开关，但当前 `WinAppSDK 2.5.1 + WinUI 2.3.9` 组合下，XAML 编译器在 Pass1 即报 `WMC1007 Cannot resolve metadata for WinUI types`；`WindowsAppSDKSelfContained` 开/关、`PublishTrimmed` 开/关、显式 CsWinRT 2.3.1、`net8.0-windows` 与 `net10.0-windows` 目标均复现。Release 仍为自包含、不裁剪；需要更换到 PRD 基线的 WinAppSDK 1.6/1.7 + .NET 8 工具链后再验证 AOT。
 - **MSIX** 未做；当前提供 MSI 安装包（ARM64 / x64），尚未做代码签名，SmartScreen 会提示未知发布者。
+- MSI 卸载默认**保留数据**并清理自启项，不提供 EXE 安装器那种“还原/保留/删除”三选一；需要在卸载前还原普通盒文件时，请先在应用内删除对应收纳盒/收纳项。
+- MSI 安装向导为 WiX 标准英文界面（欢迎 / 许可 / 安装目录 / 完成），尚未做中文资源化。
+- x86 安装包已按需求移除，仅保留 ARM64 与 x64。
 - 目标盒同步为单向补充（外部新增会显示，外部删除不会自动移除记录），完整双向同步待完善。
 - 自定义排序已支持菜单上移/下移，尚不支持直接拖拽图标调整顺序。
 - 框选暂不支持滚动时自动扩展选择范围；虚拟化到屏幕外的项目需滚动后重新框选。
