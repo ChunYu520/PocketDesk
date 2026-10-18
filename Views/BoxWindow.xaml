@@ -117,12 +117,6 @@
                 Grid.RowSpan="3"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 IsHitTestVisible="False" />
-        <Border x:Name="TintLayer"
-                Grid.RowSpan="3"
-                Background="#000000"
-                Opacity="0.38"
-                Visibility="Collapsed"
-                IsHitTestVisible="False" />
         <Border x:Name="BorderLayer"
                 Grid.RowSpan="3"
                 BorderThickness="1"

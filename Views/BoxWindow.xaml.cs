@@ -5,7 +5,6 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.Graphics;
@@ -29,10 +28,8 @@ public sealed partial class BoxWindow : Window
 
     private bool _closed;
     private bool _forceClose;
-    private int _backdropGeneration;
     private int _interactiveDepth;
     private readonly NativeMethods.SubclassProc _subclassProc;
-    private DispatcherQueueTimer? _wallpaperRefreshTimer;
     private bool _isRolledUp;
     private bool _placementApplied;
     private int _expandedHeight = 320;
@@ -89,11 +86,6 @@ public sealed partial class BoxWindow : Window
         _dropOverlayTimer.Interval = TimeSpan.FromMilliseconds(1200);
         _dropOverlayTimer.IsRepeating = false;
         _dropOverlayTimer.Tick += (_, _) => DropOverlay.Visibility = Visibility.Collapsed;
-
-        _wallpaperRefreshTimer = DispatcherQueue.CreateTimer();
-        _wallpaperRefreshTimer.Interval = TimeSpan.FromMilliseconds(220);
-        _wallpaperRefreshTimer.IsRepeating = false;
-        _wallpaperRefreshTimer.Tick += (_, _) => ApplyBackdrop();
 
         ItemsView.ItemsSource = _items;
         RootGrid.Loaded += OnRootGridLoaded;
@@ -397,68 +389,45 @@ public sealed partial class BoxWindow : Window
         return Enum.TryParse<ThemeKind>(value, true, out var parsed) ? parsed : ThemeKind.System;
     }
 
-    private async void ApplyBackdrop()
+    private void ApplyBackdrop()
     {
         var material = ResolveMaterial();
-        var generation = ++_backdropGeneration;
         try
         {
-            if (!AccessibilityService.IsHighContrast && material != MaterialKind.Solid &&
-                await TryApplyWallpaper(generation))
+            if (AccessibilityService.IsHighContrast)
             {
-                return;
+                // 高对比度下必须保证可读性：禁用 Mica/Acrylic。
+                SystemBackdrop = null;
             }
-
-            if (generation == _backdropGeneration)
+            else if (material == MaterialKind.Mica && MicaController.IsSupported())
             {
-                ApplySolidScene();
+                SystemBackdrop = new MicaBackdrop();
+            }
+            else if (material != MaterialKind.Solid && DesktopAcrylicController.IsSupported())
+            {
+                SystemBackdrop = new DesktopAcrylicBackdrop();
+            }
+            else
+            {
+                SystemBackdrop = null;
             }
         }
         catch (Exception ex)
         {
             LogService.Warn($"设置窗口材质失败：{ex.GetType().Name}");
-            if (generation == _backdropGeneration)
-            {
-                ApplySolidScene();
-            }
-        }
-    }
-
-    /// <summary>从桌面壁纸整屏图中裁剪窗口所在局部，直接作为背景刷。</summary>
-    private async Task<bool> TryApplyWallpaper(int generation)
-    {
-        var position = AppWindow.Position;
-        var size = AppWindow.Size;
-        var source = await DesktopCaptureService.GetCropAsync(
-            position.X,
-            position.Y,
-            size.Width,
-            size.Height);
-        if (source is null || generation != _backdropGeneration || _closed)
-        {
-            return false;
+            SystemBackdrop = null;
         }
 
-        BackgroundLayer.Background = new ImageBrush
+        if (SystemBackdrop is null)
         {
-            ImageSource = source,
-            Stretch = Stretch.Fill,
-        };
-        BackgroundLayer.Visibility = Visibility.Visible;
-        TintLayer.Visibility = Visibility.Visible;
-        RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        SystemBackdrop = null;
-        return true;
-    }
-
-    private void ApplySolidScene()
-    {
-        _backdropGeneration++;
-        SystemBackdrop = null;
-        RootGrid.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
-        BackgroundLayer.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
-        BackgroundLayer.Visibility = Visibility.Collapsed;
-        TintLayer.Visibility = Visibility.Collapsed;
+            RootGrid.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
+            BackgroundLayer.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            BackgroundLayer.Visibility = Visibility.Visible;
+        }
     }
 
     private MaterialKind ResolveMaterial()
@@ -493,7 +462,6 @@ public sealed partial class BoxWindow : Window
         var appearance = _box.Appearance;
         var radius = new CornerRadius(Math.Clamp(appearance.CornerRadius, 0, 24));
         BackgroundLayer.CornerRadius = radius;
-        TintLayer.CornerRadius = radius;
         BorderLayer.CornerRadius = radius;
         BackgroundLayer.Opacity = appearance.BackgroundOpacity;
         BorderLayer.Opacity = appearance.BorderOpacity;
@@ -632,8 +600,6 @@ public sealed partial class BoxWindow : Window
     {
         if (args.DidPositionChange || args.DidSizeChange)
         {
-            _wallpaperRefreshTimer?.Stop();
-            _wallpaperRefreshTimer?.Start();
             if (!_isRolledUp && AppWindow.Size.Height > 80)
             {
                 _expandedHeight = AppWindow.Size.Height;
@@ -1085,7 +1051,6 @@ public sealed partial class BoxWindow : Window
         _infoTimer.Stop();
         _undoTimer.Stop();
         _dropOverlayTimer.Stop();
-        _wallpaperRefreshTimer?.Stop();
         try
         {
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
