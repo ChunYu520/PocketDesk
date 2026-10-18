@@ -2,19 +2,19 @@
 
 桌面上的原生收纳层，而不是另一个文件管理器。基于 **WinUI 3 + Windows App SDK + .NET 10 + SQLite** 实现。
 
-当前版本：**1.1.0**（2026-10）
+当前版本：**1.1.1**（2026-10）
 
 ![普通收纳盒](docs/box-normal.png)
 
-## 1.1.0 更新
+## 1.1.1 更新
 
-- 材质新增 **全透**：透明背景 + 35% 半透明圆角边框，鼠标仍可正常点击、拖拽和右键
-- 材质选项：跟随全局 / Mica / 亚克力 / 纯色 / 全透；修复全局材质对已有收纳盒不生效的问题，点击“把默认外观应用到所有收纳盒”会清除单盒材质/主题覆盖
+- 材质新增 **磨砂玻璃**：系统 Acrylic 磨砂 + 背景不透明度可调 + 35% 半透明圆角边框
+- 材质选项：跟随全局 / Mica / 亚克力 / 纯色 / 磨砂玻璃；修复全局材质对已有收纳盒不生效的问题，点击“把默认外观应用到所有收纳盒”会清除单盒材质/主题覆盖
 - 网格视图改为 **GridView**，支持整块图标拖拽调整顺序（Windows 11 开始菜单磁贴同类控件）
 - 圆角、边缘白缝重构：原生边框并入客户区，移除自绘第二层边框，避免一个角两层圆角和黑线
 - 浅色模式修正：Mica/Acrylic 使用浅色半透明遮罩，纯色回退使用主题背景色
 - 单击标题文字直接重命名收纳盒
-- 移除边框粗细/颜色设置（统一为全透材质下的半透明边框）
+- 移除边框粗细/颜色设置（统一为磨砂玻璃材质下的半透明边框）
 
 ## 当前状态
 
@@ -25,7 +25,7 @@
 - 同名冲突（保留两者 / 替换 / 跳过 / 取消批量）、大文件确认
 - 普通盒真实移动 + journal 崩溃恢复 + 原位还原（失败回退桌面并加 `restored`）
 - 映射盒只存引用，重命名会同步源文件（AC-02）
-- 无边框 / Mica / 亚克力 / 纯色 / 全透，跟随明暗主题与系统强调色
+- 无边框 / Mica / 亚克力 / 纯色 / 磨砂玻璃，跟随明暗主题与系统强调色
 - 桌面层行为：**不占任务栏、不进 Alt+Tab、停靠在桌面之上/普通窗口之下**；Win+D 时临时浮起，不被桌面盖住，结束后恢复停靠
 - 窗口保持普通激活方式；为兼容系统材质，不再使用 `WS_EX_NOACTIVATE`，点击收纳盒会正常获得焦点
 - 卷起、位置/尺寸记忆、多显示器校验
@@ -75,8 +75,8 @@ dotnet build -p:Platform=ARM64
 
 | 文件 | 适用平台 |
 |---|---|
-| `PocketDesk-1.1.0-ARM64.msi` | Windows on ARM（原生） |
-| `PocketDesk-1.1.0-x64.msi` | 64 位 Intel/AMD |
+| `PocketDesk-1.1.1-ARM64.msi` | Windows on ARM（原生） |
+| `PocketDesk-1.1.1-x64.msi` | 64 位 Intel/AMD |
 
 - MSI 带中文安装向导：欢迎 → 许可协议 → 自定义安装（功能选择） → 安装 → 完成。
 - “自定义安装”中可勾选/取消 **桌面快捷方式**；开始菜单快捷方式始终创建。
@@ -94,7 +94,7 @@ wix build -arch arm64 -ext WixToolset.UI.wixext `
   -loc installer\WixUI_zh-CN.wxl `
   -d PublishDir=bin\Release\net10.0-windows10.0.26100.0\win-arm64\publish `
   -d LicenseFile=installer\License.rtf `
-  -o ..\Pack\PocketDesk-1.1.0-ARM64.msi installer\PocketDesk.wxs
+  -o ..\Pack\PocketDesk-1.1.1-ARM64.msi installer\PocketDesk.wxs
 ```
 
 > 为了让 MSI 以当前用户安装，构建后把 MSI Summary Information 的 Word Count 提权位（0x8）清零；否则 Windows Installer 会按 per-machine 处理。
@@ -198,8 +198,8 @@ installer/
 - **MSIX** 未做；当前提供 MSI 安装包（ARM64 / x64），尚未做代码签名，SmartScreen 会提示未知发布者。
 - MSI 卸载默认**保留数据**并清理自启项，不提供 EXE 安装器那种“还原/保留/删除”三选一；需要在卸载前还原普通盒文件时，请先在应用内删除对应收纳盒/收纳项。
 - MSI 使用功能树选择“桌面快捷方式”，不提供安装路径页；安装目录固定为 `%LOCALAPPDATA%\Programs\PocketDesk`。
-- 背景透明度作用于 Mica/Acrylic 的遮罩；纯色材质不透明；需要完全透出桌面时请选择“全透”。
-- 材质使用系统 Mica / DesktopAcrylicBackdrop；全透使用透明 SystemBackdrop + DWM 客户区延伸；不再做壁纸截屏，拖动与缩放保持流畅。
+- 背景透明度作用于 Mica/Acrylic 的遮罩；纯色材质不透明；需要完磨砂玻璃出桌面时请选择“磨砂玻璃”。
+- 材质使用系统 Mica / DesktopAcrylicBackdrop；磨砂玻璃使用透明 SystemBackdrop + DWM 客户区延伸；不再做壁纸截屏，拖动与缩放保持流畅。
 - x86 安装包已按需求移除，仅保留 ARM64 与 x64。
 - 目标盒同步为单向补充（外部新增会显示，外部删除不会自动移除记录），完整双向同步待完善。
 - 自定义排序支持菜单上移/下移；网格视图使用 GridView 的整块磁贴拖拽重排。

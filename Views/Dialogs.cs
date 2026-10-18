@@ -183,7 +183,7 @@ public static class Dialogs
         var material = new ComboBox
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            ItemsSource = new[] { "跟随全局", "Mica", "亚克力", "纯色", "全透" },
+            ItemsSource = new[] { "跟随全局", "Mica", "亚克力", "纯色", "磨砂玻璃" },
             SelectedIndex = appearance.Material switch
             {
                 "Mica" => 1,

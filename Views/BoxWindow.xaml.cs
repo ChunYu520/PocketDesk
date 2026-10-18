@@ -364,7 +364,7 @@ public sealed partial class BoxWindow : Window
             }
             else if (material == MaterialKind.Transparent)
             {
-                SystemBackdrop = null;
+                SystemBackdrop = new DesktopAcrylicBackdrop();
             }
             else if (material == MaterialKind.Mica && MicaController.IsSupported())
             {
@@ -385,13 +385,7 @@ public sealed partial class BoxWindow : Window
             SystemBackdrop = null;
         }
 
-        if (material == MaterialKind.Transparent)
-        {
-            RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            BackgroundLayer.Visibility = Visibility.Collapsed;
-            ApplyFrameExtension(-1);
-        }
-        else if (SystemBackdrop is null)
+        if (SystemBackdrop is null)
         {
             RootGrid.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
             BackgroundLayer.Visibility = Visibility.Collapsed;
