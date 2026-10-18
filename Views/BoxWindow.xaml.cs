@@ -45,6 +45,9 @@ public sealed partial class BoxWindow : Window
     private bool _marqueeAdditive;
     private Point _marqueeStart;
     private double _rasterScale = 1.0;
+    private BoxItem? _reorderItem;
+    private Point _reorderStart;
+    private bool _reorderActive;
 
     private List<DeletedItemInfo> _lastDeleted = new();
 
@@ -114,8 +117,20 @@ public sealed partial class BoxWindow : Window
 
             if (AppWindow.Presenter is OverlappedPresenter presenter)
             {
-                // 去掉系统标题栏和 1px 原生边框，避免边缘露出壁纸形成白线。
-                presenter.SetBorderAndTitleBar(false, false);
+                // 保留系统圆角；隐藏标题栏，内容延伸到标题栏区域。
+                presenter.SetBorderAndTitleBar(true, false);
+                ExtendsContentIntoTitleBar = true;
+                var titleBar = AppWindow.TitleBar;
+                titleBar.ExtendsContentIntoTitleBar = true;
+                titleBar.BackgroundColor = Microsoft.UI.Colors.Transparent;
+                titleBar.InactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
+                titleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
+                titleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
+                if (Microsoft.UI.Windowing.AppWindowTitleBar.IsCustomizationSupported())
+                {
+                    titleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
+                }
+                SetTitleBar(TitleBarHost);
                 presenter.IsResizable = true;
                 presenter.IsMinimizable = true;
                 presenter.IsMaximizable = false;
@@ -1151,7 +1166,7 @@ public sealed partial class BoxWindow : Window
 
                 if (payload.BoxId == _box.Id)
                 {
-                    // 同盒拖动交给 ListView 的 CanReorderItems 处理，由 DragItemsCompleted 持久化。
+                    ReorderWithinBox(payload.ItemIds, e.GetPosition(ItemsView));
                     return;
                 }
 
@@ -2168,6 +2183,140 @@ public sealed partial class BoxWindow : Window
     // ---------------- 列表交互 ----------------
 
     // ---------------- 框选 ----------------
+
+    private void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (args.ItemContainer is ListViewItem container)
+        {
+            container.PointerPressed -= OnReorderPointerPressed;
+            container.PointerPressed += OnReorderPointerPressed;
+        }
+    }
+
+    private void OnReorderPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        _reorderItem = null;
+        _reorderActive = false;
+        var point = e.GetCurrentPoint(ItemsView);
+        if (!point.Properties.IsLeftButtonPressed || FindItem(e.OriginalSource as DependencyObject) is not { } item)
+        {
+            return;
+        }
+
+        _reorderItem = item;
+        _reorderStart = point.Position;
+        LogService.Info($"拖拽排序按下：{item.DisplayName}");
+    }
+
+    private void OnReorderPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (_reorderItem is null)
+        {
+            return;
+        }
+
+        var point = e.GetCurrentPoint(ItemsView);
+        if (!point.Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        var dx = point.Position.X - _reorderStart.X;
+        var dy = point.Position.Y - _reorderStart.Y;
+        if (!_reorderActive && Math.Abs(dx) + Math.Abs(dy) > 4)
+        {
+            _reorderActive = true;
+            ItemsView.CapturePointer(e.Pointer);
+            if (ItemsView.ContainerFromItem(_reorderItem) is ListViewItem container)
+            {
+                container.Opacity = 0.55;
+            }
+        }
+
+        if (!_reorderActive)
+        {
+            return;
+        }
+
+        MoveRebuildingItem(point.Position);
+        e.Handled = true;
+    }
+
+    private void MoveRebuildingItem(Point point)
+    {
+        var item = _reorderItem;
+        if (item is null)
+        {
+            return;
+        }
+
+        var oldIndex = _items.IndexOf(item);
+        if (oldIndex < 0)
+        {
+            return;
+        }
+
+        var target = _items.Count;
+        for (var i = 0; i < _items.Count; i++)
+        {
+            if (ItemsView.ContainerFromIndex(i) is not ListViewItem container)
+            {
+                continue;
+            }
+
+            var origin = container.TransformToVisual(ItemsView).TransformPoint(new Point(0, 0));
+            var centerY = origin.Y + container.ActualHeight / 2;
+            if (point.Y < centerY)
+            {
+                target = i;
+                break;
+            }
+        }
+
+        var insert = target;
+        if (oldIndex < insert)
+        {
+            insert--;
+        }
+
+        insert = Math.Clamp(insert, 0, _items.Count - 1);
+        if (insert != oldIndex)
+        {
+            _items.Move(oldIndex, insert);
+        }
+    }
+
+    private void OnReorderPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        var item = _reorderItem;
+        var active = _reorderActive;
+        _reorderItem = null;
+        _reorderActive = false;
+        if (item is null || !active)
+        {
+            return;
+        }
+
+        if (ItemsView.ContainerFromItem(item) is ListViewItem container)
+        {
+            container.Opacity = 1;
+        }
+
+        try
+        {
+            ItemsView.ReleasePointerCapture(e.Pointer);
+        }
+        catch
+        {
+            // 忽略已释放的指针。
+        }
+
+        BoxService.SetSort(_box, "custom", false);
+        ItemRepository.UpdateSortIndices(_items.ToList());
+        ShowInfo("顺序已更新", "已切换为自定义排序，拖拽位置已保存。", InfoBarSeverity.Success, autoCloseMs: 2000);
+        LogService.Info($"拖拽排序释放：{item.DisplayName}");
+        e.Handled = true;
+    }
 
     private void OnMarqueePointerPressed(object sender, PointerRoutedEventArgs e)
     {
