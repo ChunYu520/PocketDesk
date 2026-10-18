@@ -355,11 +355,49 @@ public sealed partial class BoxWindow : Window
 
     private void ApplyBackdrop()
     {
-        // 系统 Mica/Acrylic 在当前 WinUI/系统组合下会透明或回退成纯色，
-        // 为保证浅色/深色、圆角与边缘都稳定，使用主题实色背景。
-        SystemBackdrop = null;
-        RootGrid.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
-        BackgroundLayer.Visibility = Visibility.Collapsed;
+        var material = ResolveMaterial();
+        try
+        {
+            if (AccessibilityService.IsHighContrast)
+            {
+                SystemBackdrop = null;
+            }
+            else if (material == MaterialKind.Mica && MicaController.IsSupported())
+            {
+                SystemBackdrop = new MicaBackdrop();
+            }
+            else if (material != MaterialKind.Solid && DesktopAcrylicController.IsSupported())
+            {
+                SystemBackdrop = new DesktopAcrylicBackdrop();
+            }
+            else
+            {
+                SystemBackdrop = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            LogService.Warn($"设置窗口材质失败：{ex.GetType().Name}");
+            SystemBackdrop = null;
+        }
+
+        if (SystemBackdrop is null)
+        {
+            RootGrid.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
+            BackgroundLayer.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            var light = RootGrid.RequestedTheme == ElementTheme.Light ||
+                        (RootGrid.RequestedTheme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Light);
+            BackgroundLayer.Background = new SolidColorBrush(light ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black)
+            {
+                Opacity = 0.35,
+            };
+            BackgroundLayer.Visibility = Visibility.Visible;
+        }
+
         ApplyWindowBorderColor();
     }
 
