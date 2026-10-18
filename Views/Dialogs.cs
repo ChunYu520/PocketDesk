@@ -183,13 +183,12 @@ public static class Dialogs
         var material = new ComboBox
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            ItemsSource = new[] { "跟随全局", "Mica", "亚克力", "纯色", "磨砂玻璃" },
+            ItemsSource = new[] { "跟随全局", "Mica", "亚克力", "纯色" },
             SelectedIndex = appearance.Material switch
             {
                 "Mica" => 1,
                 "Acrylic" => 2,
                 "Solid" => 3,
-                "Transparent" => 4,
                 _ => 0,
             },
         };
@@ -218,14 +217,6 @@ public static class Dialogs
         var radiusValue = new TextBlock { Text = $"{appearance.CornerRadius:0} px", FontSize = 12, Opacity = 0.7 };
         radiusSlider.ValueChanged += (_, e) => radiusValue.Text = $"{e.NewValue:0} px";
 
-        var backgroundSlider = new Slider { Minimum = 0.2, Maximum = 1, StepFrequency = 0.05, Value = appearance.BackgroundOpacity };
-        var backgroundValue = new TextBlock { Text = $"{appearance.BackgroundOpacity:P0}", FontSize = 12, Opacity = 0.7 };
-        backgroundSlider.ValueChanged += (_, e) => backgroundValue.Text = $"{e.NewValue:P0}";
-
-        var borderSlider = new Slider { Minimum = 0, Maximum = 1, StepFrequency = 0.05, Value = appearance.BorderOpacity };
-        var borderValue = new TextBlock { Text = $"{appearance.BorderOpacity:P0}", FontSize = 12, Opacity = 0.7 };
-        borderSlider.ValueChanged += (_, e) => borderValue.Text = $"{e.NewValue:P0}";
-
         var columnsSlider = new Slider { Minimum = 0, Maximum = 9, StepFrequency = 1, Value = appearance.Columns };
         var columnsValue = new TextBlock { Text = appearance.Columns == 0 ? "自适应" : $"{appearance.Columns} 列", FontSize = 12, Opacity = 0.7 };
         columnsSlider.ValueChanged += (_, e) =>
@@ -244,7 +235,6 @@ public static class Dialogs
         panel.Children.Add(Labeled("视图", view));
         panel.Children.Add(Labeled("图标大小", new StackPanel { Children = { iconSlider, iconValue } }));
         panel.Children.Add(Labeled("外框圆角", new StackPanel { Children = { radiusSlider, radiusValue } }));
-        panel.Children.Add(Labeled("背景不透明度", new StackPanel { Children = { backgroundSlider, backgroundValue } }));
         panel.Children.Add(Labeled("网格列数", new StackPanel { Children = { columnsSlider, columnsValue } }));
         panel.Children.Add(Labeled("文件名显示", lines));
 
@@ -284,7 +274,6 @@ public static class Dialogs
                 1 => "Mica",
                 2 => "Acrylic",
                 3 => "Solid",
-                4 => "Transparent",
                 _ => null,
             };
             appearance.Theme = theme.SelectedIndex switch
@@ -296,7 +285,6 @@ public static class Dialogs
             appearance.View = view.SelectedIndex == 1 ? "list" : "grid";
             appearance.IconSize = iconSlider.Value;
             appearance.CornerRadius = radiusSlider.Value;
-            appearance.BackgroundOpacity = backgroundSlider.Value;
             appearance.Columns = (int)Math.Round(columnsSlider.Value);
             appearance.NameLines = lines.SelectedIndex;
             result = appearance;

@@ -105,7 +105,6 @@
                                         <ComboBoxItem Content="Mica（云母，与壁纸融合）" />
                                         <ComboBoxItem Content="DesktopAcrylic（亚克力，更通透）" />
                                         <ComboBoxItem Content="纯色（最高可读性）" />
-                                        <ComboBoxItem Content="磨砂玻璃（可调透明度）" />
                                     </ComboBox>
                                     <ComboBox x:Name="ThemeCombo"
                                               Header="主题"
@@ -128,13 +127,6 @@
                                         <Slider x:Name="RadiusSlider" Minimum="0" Maximum="24"
                                                 StepFrequency="1" ValueChanged="OnAppearanceSliderChanged" />
                                         <TextBlock x:Name="RadiusValue" FontSize="11" Opacity="0.6" />
-                                    </StackPanel>
-
-                                    <StackPanel Spacing="4">
-                                        <TextBlock Text="默认背景不透明度" FontSize="12" Opacity="0.75" />
-                                        <Slider x:Name="OpacitySlider" Minimum="0.2" Maximum="1"
-                                                StepFrequency="0.05" ValueChanged="OnAppearanceSliderChanged" />
-                                        <TextBlock x:Name="OpacityValue" FontSize="11" Opacity="0.6" />
                                     </StackPanel>
 
                                     <Button Content="把默认外观应用到所有收纳盒" Click="OnApplyDefaultsToAll" />

@@ -27,7 +27,6 @@ public sealed partial class SettingsWindow : Window
         {
             AppSettingsService.Current.DefaultIconSize = IconSizeSlider.Value;
             AppSettingsService.Current.DefaultCornerRadius = RadiusSlider.Value;
-            AppSettingsService.Current.DefaultBackgroundOpacity = OpacitySlider.Value;
             AppSettingsService.Save();
         };
 
@@ -104,7 +103,6 @@ public sealed partial class SettingsWindow : Window
         {
             MaterialKind.Acrylic => 1,
             MaterialKind.Solid => 2,
-            MaterialKind.Transparent => 3,
             _ => 0,
         };
         ThemeCombo.SelectedIndex = s.ThemeKind switch
@@ -115,7 +113,6 @@ public sealed partial class SettingsWindow : Window
         };
         IconSizeSlider.Value = s.DefaultIconSize;
         RadiusSlider.Value = s.DefaultCornerRadius;
-        OpacitySlider.Value = s.DefaultBackgroundOpacity;
         UpdateAppearanceLabels();
 
         ConfirmDeleteToggle.IsOn = s.ConfirmDelete;
@@ -137,7 +134,6 @@ public sealed partial class SettingsWindow : Window
     {
         IconSizeValue.Text = $"{IconSizeSlider.Value:0} px";
         RadiusValue.Text = $"{RadiusSlider.Value:0} px";
-        OpacityValue.Text = $"{OpacitySlider.Value:P0}";
     }
 
     private void Save()
@@ -222,7 +218,6 @@ public sealed partial class SettingsWindow : Window
         {
             1 => "Acrylic",
             2 => "Solid",
-            3 => "Transparent",
             _ => "Mica",
         };
         Save();

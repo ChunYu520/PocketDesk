@@ -117,7 +117,7 @@ public static class AppInfo
     public static string Version =>
         typeof(AppInfo).Assembly.GetName().Version is { } v
             ? $"{v.Major}.{v.Minor}.{v.Build}"
-            : "1.1.2";
+            : "1.1.3";
 
     public const string ProductName = "PocketDesk";
 }

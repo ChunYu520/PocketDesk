@@ -362,32 +362,17 @@ public sealed partial class BoxWindow : Window
             {
                 SystemBackdrop = null;
             }
-            else if (material == MaterialKind.Acrylic)
+            else if ((material == MaterialKind.Acrylic || material == MaterialKind.Transparent) &&
+                     DesktopAcrylicController.IsSupported())
             {
-                var light = RootGrid.RequestedTheme == ElementTheme.Light ||
-                            (RootGrid.RequestedTheme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Light);
-                var opacity = Math.Clamp(_box.Appearance.BackgroundOpacity, 0.05, 1.0);
-                SystemBackdrop = new AdjustableAcrylicBackdrop(
-                    light ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black,
-                    opacity * 0.55,
-                    0.35);
-            }
-            else if (material == MaterialKind.Transparent)
-            {
-                var light = RootGrid.RequestedTheme == ElementTheme.Light ||
-                            (RootGrid.RequestedTheme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Light);
-                var opacity = Math.Clamp(_box.Appearance.BackgroundOpacity, 0.05, 1.0);
-                // 磨砂玻璃：比亚克力更厚的 tint，仍然受同一个背景不透明度滑条控制。
-                SystemBackdrop = new AdjustableAcrylicBackdrop(
-                    light ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black,
-                    opacity * 0.85,
-                    0.6);
+                // 旧的“全透/磨砂玻璃”数据统一回退为系统亚克力。
+                SystemBackdrop = new DesktopAcrylicBackdrop();
             }
             else if (material == MaterialKind.Mica && MicaController.IsSupported())
             {
                 SystemBackdrop = new MicaBackdrop();
             }
-            else if (material != MaterialKind.Solid && DesktopAcrylicController.IsSupported())
+            else if (material == MaterialKind.Acrylic && DesktopAcrylicController.IsSupported())
             {
                 SystemBackdrop = new DesktopAcrylicBackdrop();
             }
@@ -405,22 +390,15 @@ public sealed partial class BoxWindow : Window
         if (SystemBackdrop is null)
         {
             RootGrid.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
-            BackgroundLayer.Visibility = Visibility.Collapsed;
-            ApplyFrameExtension(1);
         }
         else
         {
             RootGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            var light = RootGrid.RequestedTheme == ElementTheme.Light ||
-                        (RootGrid.RequestedTheme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Light);
-            BackgroundLayer.Background = new SolidColorBrush(light ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black)
-            {
-                Opacity = 0.35,
-            };
-            BackgroundLayer.Visibility = Visibility.Visible;
-            ApplyFrameExtension(1);
         }
 
+        BackgroundLayer.Visibility = Visibility.Collapsed;
+        BorderLayer.Visibility = Visibility.Collapsed;
+        ApplyFrameExtension(1);
         ApplyWindowBorderColor();
     }
 
@@ -547,20 +525,7 @@ public sealed partial class BoxWindow : Window
         var radius = new CornerRadius(Math.Clamp(appearance.CornerRadius, 0, 24));
         BackgroundLayer.CornerRadius = radius;
         BorderLayer.CornerRadius = radius;
-        BackgroundLayer.Opacity = Math.Clamp(appearance.BackgroundOpacity, 0.1, 1.0);
-        var transparent = ResolveMaterial() == MaterialKind.Transparent;
-        BorderLayer.Visibility = transparent ? Visibility.Visible : Visibility.Collapsed;
-        if (transparent)
-        {
-            var light = RootGrid.RequestedTheme == ElementTheme.Light ||
-                        (RootGrid.RequestedTheme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Light);
-            BorderLayer.BorderThickness = new Thickness(1);
-            BorderLayer.BorderBrush = new SolidColorBrush(light ? Microsoft.UI.Colors.Black : Microsoft.UI.Colors.White)
-            {
-                Opacity = 0.35,
-            };
-        }
-
+        BorderLayer.Visibility = Visibility.Collapsed;
         ApplyWindowBorderColor();
         ApplyLayout();
         ApplyItemAppearance(reloadIcons: true);
@@ -1615,7 +1580,6 @@ public sealed partial class BoxWindow : Window
             }
         });
         AddMenuItem(flyout, "外观…", "\uE771", OpenAppearanceAsync);
-        flyout.Items.Add(BuildOpacityMenu());
         flyout.Items.Add(BuildPresetMenu());
         flyout.Items.Add(new MenuFlyoutSeparator());
         AddMenuItem(flyout, "新建同类收纳盒", "\uE710", () => WindowManager.OpenManager(_box.Type, createImmediately: true));
@@ -1695,36 +1659,6 @@ public sealed partial class BoxWindow : Window
         BeginInteractive();
         flyout.Closed += (_, _) => EndInteractive();
         flyout.ShowAt(target, position);
-    }
-
-    private MenuFlyoutSubItem BuildOpacityMenu()
-    {
-        var sub = new MenuFlyoutSubItem
-        {
-            Text = "背景透明度",
-            Icon = new FontIcon { Glyph = "\uE7F0", FontSize = 14 },
-        };
-
-        foreach (var percent in new[] { 100, 90, 80, 70, 60, 40, 20 })
-        {
-            var item = new ToggleMenuFlyoutItem
-            {
-                Text = $"{percent}%",
-                IsChecked = Math.Abs(_box.Appearance.BackgroundOpacity - percent / 100.0) < 0.01,
-            };
-            item.Click += (_, _) => SetBackgroundOpacity(percent / 100.0);
-            sub.Items.Add(item);
-        }
-
-        return sub;
-    }
-
-    private void SetBackgroundOpacity(double value)
-    {
-        _box.Appearance.BackgroundOpacity = Math.Clamp(value, 0.2, 1.0);
-        BoxService.SaveAppearance(_box, _box.Appearance);
-        ApplyAppearance();
-        ShowInfo("背景透明度", $"{_box.Appearance.BackgroundOpacity:P0}", InfoBarSeverity.Informational, autoCloseMs: 2000);
     }
 
     private MenuFlyoutSubItem BuildPresetMenu()
