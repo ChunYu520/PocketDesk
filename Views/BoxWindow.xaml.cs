@@ -376,10 +376,21 @@ public sealed partial class BoxWindow : Window
         }
     }
 
+    public void RefreshVisuals()
+    {
+        if (_closed)
+        {
+            return;
+        }
+
+        ApplyTheme();
+        ApplyBackdrop();
+        ApplyAppearance();
+    }
+
     private void ApplyAppearance()
     {
-        var appearance = _box.Appearance;
-        var radius = new CornerRadius(Math.Clamp(appearance.CornerRadius, 0, 24));
+        var appearance = _box.Appearance;        var radius = new CornerRadius(Math.Clamp(appearance.CornerRadius, 0, 24));
         BackgroundLayer.CornerRadius = radius;
         BorderLayer.CornerRadius = radius;
         BackgroundLayer.Opacity = appearance.BackgroundOpacity;
@@ -676,7 +687,7 @@ public sealed partial class BoxWindow : Window
                 continue;
             }
 
-            if (!item.HasRealPath || !PathUtil.Exists(item.RealPath))
+            if (!item.HasRealPath || (!PathUtil.Exists(item.RealPath) && !item.RealPath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)))
             {
                 continue;
             }
@@ -1007,6 +1018,74 @@ public sealed partial class BoxWindow : Window
         }
     }
 
+    private void ReorderWithinBox(IReadOnlyList<string> itemIds, Point dropPoint)
+    {
+        var moving = itemIds
+            .Select(id => _items.FirstOrDefault(i => i.Id == id))
+            .Where(i => i is not null)
+            .Select(i => i!)
+            .ToList();
+        if (moving.Count == 0 || moving.Count == _items.Count)
+        {
+            return;
+        }
+
+        var target = _items.Count;
+        for (var i = 0; i < _items.Count; i++)
+        {
+            if (ItemsView.ContainerFromIndex(i) is not ListViewItem container)
+            {
+                continue;
+            }
+
+            try
+            {
+                var origin = container.TransformToVisual(ItemsView).TransformPoint(new Point(0, 0));
+                if (dropPoint.Y < origin.Y + container.ActualHeight / 2)
+                {
+                    target = i;
+                    break;
+                }
+            }
+            catch
+            {
+                // 容器尚未布局时忽略。
+            }
+        }
+
+        var insertIndex = target;
+        foreach (var item in moving)
+        {
+            var oldIndex = _items.IndexOf(item);
+            if (oldIndex >= 0 && oldIndex < target)
+            {
+                insertIndex--;
+            }
+        }
+
+        var ordered = _items.ToList();
+        ordered.RemoveAll(moving.Contains);
+        ordered.InsertRange(Math.Clamp(insertIndex, 0, ordered.Count), moving);
+        _items.Clear();
+        foreach (var item in ordered)
+        {
+            _items.Add(item);
+        }
+
+        BoxService.SetSort(_box, "custom", false);
+        ItemRepository.UpdateSortIndices(_items.ToList());
+        ShowInfo("顺序已更新", "已切换为自定义排序，拖拽位置已保存。", InfoBarSeverity.Success, autoCloseMs: 2500);
+    }
+
+    private static string? ResolveShellPath(string name) => name switch
+    {
+        "此电脑" or "This PC" => "shell:MyComputerFolder",
+        "控制面板" or "Control Panel" => "shell:ControlPanelFolder",
+        "回收站" or "Recycle Bin" => "shell:RecycleBinFolder",
+        "网络" or "Network" => "shell:NetworkPlacesFolder",
+        _ => null,
+    };
+
     private async void OnDrop(object sender, DragEventArgs e)
     {
         SetDropOverlay(false);
@@ -1018,9 +1097,14 @@ public sealed partial class BoxWindow : Window
             {
                 var raw = await e.DataView.GetDataAsync(InternalDragFormat);
                 var payload = Json.Deserialize<InternalDragPayload>(raw as string);
-                if (payload is null || payload.BoxId == _box.Id)
+                if (payload is null)
                 {
-                    ShowInfo("无需移动", L.SameBoxDrop, InfoBarSeverity.Informational, autoCloseMs: 2500);
+                    return;
+                }
+
+                if (payload.BoxId == _box.Id)
+                {
+                    ReorderWithinBox(payload.ItemIds, e.GetPosition(ItemsView));
                     return;
                 }
 
@@ -1056,9 +1140,32 @@ public sealed partial class BoxWindow : Window
             {
                 var storageItems = await e.DataView.GetStorageItemsAsync();
                 var paths = storageItems.Select(i => i.Path).Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+                var shellAdded = 0;
+                if (_box.Type != BoxType.Normal)
+                {
+                    foreach (var storageItem in storageItems.Where(i => string.IsNullOrWhiteSpace(i.Path)))
+                    {
+                        var shellPath = ResolveShellPath(storageItem.Name);
+                        if (shellPath is not null && BoxService.AddShellReference(_box, shellPath, storageItem.Name) is not null)
+                        {
+                            shellAdded++;
+                        }
+                    }
+                }
+
                 if (paths.Count == 0)
                 {
-                    ShowInfo("无法收纳", "拖入的内容不是本地文件或文件夹。", InfoBarSeverity.Warning);
+                    if (shellAdded > 0)
+                    {
+                        ShowInfo("已添加", $"已添加 {shellAdded} 个系统位置。", InfoBarSeverity.Success, autoCloseMs: 2500);
+                    }
+                    else
+                    {
+                        ShowInfo("无法收纳", _box.Type == BoxType.Normal
+                            ? "普通收纳盒不能收纳“此电脑/控制面板/回收站”，请使用映射收纳盒。"
+                            : "拖入的内容不是本地文件、文件夹或支持的系统位置。", InfoBarSeverity.Warning);
+                    }
+
                     return;
                 }
 

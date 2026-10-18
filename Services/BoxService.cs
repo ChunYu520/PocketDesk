@@ -168,8 +168,30 @@ public static class BoxService
         BoxContentChanged?.Invoke(box.Id);
     }
 
-    public static void SaveAppearance(Box box, BoxAppearance appearance)
+    /// <summary>为映射盒添加 shell 命名空间位置（此电脑/控制面板/回收站等）。</summary>
+    public static BoxItem? AddShellReference(Box box, string shellPath, string displayName)
     {
+        if (box.Type == BoxType.Normal || string.IsNullOrWhiteSpace(shellPath))
+        {
+            return null;
+        }
+
+        var item = new BoxItem
+        {
+            BoxId = box.Id,
+            Kind = ItemKind.Folder,
+            DisplayName = displayName,
+            SourcePath = shellPath,
+            SortIndex = ItemRepository.MaxSortIndex(box.Id) + 1,
+            AddedAt = DateTime.Now,
+            IsLink = true,
+        };
+        ItemRepository.Insert(item);
+        BoxContentChanged?.Invoke(box.Id);
+        return item;
+    }
+
+    public static void SaveAppearance(Box box, BoxAppearance appearance)    {
         box.Appearance = appearance;
         BoxRepository.SetAppearance(box.Id, appearance);
         BoxContentChanged?.Invoke(box.Id);
@@ -515,6 +537,14 @@ public static class BoxService
         {
             item.IsMissing = true;
             item.MissingReason = L.PathMissing;
+            return;
+        }
+
+        if (item.RealPath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
+        {
+            // 此电脑/控制面板/回收站等 shell 命名空间没有文件系统路径，交由 explorer 打开。
+            item.IsMissing = false;
+            item.MissingReason = null;
             return;
         }
 

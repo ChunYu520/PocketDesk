@@ -49,7 +49,7 @@ public static class AppServices
             Tray = new TrayIcon("PocketDesk");
             Tray.ShowAllRequested += () => WindowManager.ShowAll();
             Tray.HideAllRequested += () => WindowManager.HideAll();
-            Tray.NewBoxRequested += () => WindowManager.OpenManager(BoxType.Normal, createImmediately: true);
+            Tray.NewBoxRequested += () => WindowManager.CreateQuickBox();
             Tray.ManagerRequested += () => WindowManager.OpenManager();
             Tray.SettingsRequested += () => WindowManager.OpenSettings();
             Tray.ExitRequested += Shutdown;

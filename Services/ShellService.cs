@@ -16,6 +16,17 @@ public static class ShellService
 
         try
         {
+            if (path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"\"{path}\"",
+                    UseShellExecute = true,
+                });
+                return;
+            }
+
             Process.Start(new ProcessStartInfo
             {
                 FileName = path,

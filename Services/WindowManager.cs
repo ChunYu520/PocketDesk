@@ -73,6 +73,10 @@ public static class WindowManager
         {
             var first = BoxWindows.Values.FirstOrDefault();
             first?.Activate();
+            foreach (var window in BoxWindows.Values)
+            {
+                window.RefreshVisuals();
+            }
         }
         else
         {
@@ -90,6 +94,7 @@ public static class WindowManager
                 existing.Activate();
             }
 
+            existing.RefreshVisuals();
             return;
         }
 
@@ -104,6 +109,7 @@ public static class WindowManager
             }
 
             window.SendToBack();
+            window.RefreshVisuals();
         }
         catch (Exception ex)
         {
@@ -160,8 +166,30 @@ public static class WindowManager
         BoxService.NotifyBoxesChanged();
     }
 
-    public static void OpenManager(BoxType? createType = null, bool createImmediately = false)
+    /// <summary>托盘“新建收纳盒”快速路径：默认名称直接创建并显示，避免在托盘菜单回调里弹模态框。</summary>
+    public static void CreateQuickBox()
     {
+        try
+        {
+            var existing = BoxService.GetBoxes();
+            var index = existing.Count + 1;
+            string name;
+            do
+            {
+                name = $"收纳盒 {index++}";
+            }
+            while (existing.Any(b => string.Equals(b.Name, name, StringComparison.OrdinalIgnoreCase)));
+
+            var box = BoxService.CreateBox(name, BoxType.Normal, null);
+            ShowBox(box);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error("托盘新建收纳盒失败", ex);
+        }
+    }
+
+    public static void OpenManager(BoxType? createType = null, bool createImmediately = false)    {
         if (_manager is null)
         {
             try
